@@ -3,6 +3,8 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import pool from '../config/db.js';
 import crypto from 'crypto';
+import { AuthRequest } from '../middleware/authMiddleware.js';
+
 
 export const register = async (req: Request, res: Response) => {
   const { email, password, referralCode } = req.body;
@@ -96,5 +98,23 @@ export const login = async (req: Request, res: Response) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Erreur lors de la connexion." });
+  }
+};
+
+export const getMe = async (req: AuthRequest, res: Response) => {
+  try {
+    // Grâce au middleware, on a l'ID dans req.user
+    const userResult = await pool.query(
+      'SELECT id, email, referral_code, is_admin FROM users WHERE id = $1',
+      [req.user?.id]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ message: "Utilisateur non trouvé." });
+    }
+
+    res.json(userResult.rows[0]);
+  } catch (error) {
+    res.status(500).json({ message: "Erreur serveur." });
   }
 };
