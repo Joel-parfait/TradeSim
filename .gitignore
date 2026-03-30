@@ -1,0 +1,11 @@
+# Dépendances
+node_modules/
+dist/
+
+# Sécurité (IMPORTANT)
+.env
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
