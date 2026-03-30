@@ -3,6 +3,9 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import pool from './config/db.js';
 import authRoutes from './routes/authRoutes.js';
+import walletRoutes from './routes/walletRoutes.js';
+
+
 
 dotenv.config();
 
@@ -12,8 +15,11 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// Routes
+// Route authentification
 app.use('/api/auth', authRoutes);
+
+//Route wallet
+app.use('/api/wallet', walletRoutes);
 
 // Route de santé
 app.get('/api/health', async (req, res) => {
