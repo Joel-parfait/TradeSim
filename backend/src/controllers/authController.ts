@@ -5,7 +5,6 @@ import pool from '../config/db.js';
 import crypto from 'crypto';
 import { AuthRequest } from '../middleware/authMiddleware.js';
 
-
 export const register = async (req: Request, res: Response) => {
   const { email, password, referralCode } = req.body;
 
@@ -16,14 +15,15 @@ export const register = async (req: Request, res: Response) => {
       return res.status(400).json({ message: "Cet email est déjà utilisé." });
     }
 
-    // 2. Hachage du mot de passe (Sécurité CIRT !)
+    // 2. Hachage du mot de passe
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // 3. Générer un code de parrainage unique pour le nouvel utilisateur
+    // 3. Générer code parrainage et OTP
     const myReferralCode = crypto.randomBytes(4).toString('hex').toUpperCase();
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // 4. Gérer le parrainage (si un code a été fourni à l'inscription)
+    // 4. Gérer le parrainage (Vérifier le code du parrain)
     let referredBy = null;
     if (referralCode) {
       const referrer = await pool.query('SELECT id FROM users WHERE referral_code = $1', [referralCode]);
@@ -32,42 +32,33 @@ export const register = async (req: Request, res: Response) => {
       }
     }
 
-    // 5. Créer l'utilisateur (Transaction SQL pour créer l'utilisateur ET son wallet)
+    // 5. Créer l'utilisateur (is_verified est FALSE par défaut)
     const newUser = await pool.query(
-      'INSERT INTO users (email, password_hash, referral_code, referred_by) VALUES ($1, $2, $3, $4) RETURNING id, email, referral_code',
-      [email, hashedPassword, myReferralCode, referredBy]
+      'INSERT INTO users (email, password_hash, referral_code, otp_code, is_verified) VALUES ($1, $2, $3, $4, FALSE) RETURNING id, email',
+      [email, hashedPassword, myReferralCode, otp]
     );
 
     const userId = newUser.rows[0].id;
 
-    // 6. Créer le portefeuille (Wallet) associé avec un bonus de bienvenue de 100$ (exemple)
-    await pool.query(
-      'INSERT INTO wallets (user_id, balance) VALUES ($1, $2)',
-      [userId, 100.00]
-    );
+    // 6. Créer le portefeuille
+    await pool.query('INSERT INTO wallets (user_id, balance) VALUES ($1, $2)', [userId, 100.00]);
 
-    // Dans la fonction register, après avoir créé le Wallet du nouvel utilisateur (userId) :
+    // 7. Bonus Parrainage
     if (referredBy) {
-        const BONUS_AMOUNT = 50.00; // Montant du bonus de parrainage
-        
-        // 1. Ajouter le bonus au portefeuille du parrain
-        await pool.query(
-            'UPDATE wallets SET balance = balance + $1, bonus_balance = bonus_balance + $1 WHERE user_id = $2',
-            [BONUS_AMOUNT, referredBy]
-        );
-
-        // 2. Enregistrer la transaction pour l'historique du parrain
-        await pool.query(
-            'INSERT INTO transactions (user_id, type, amount, status) VALUES ($1, $2, $3, $4)',
-            [referredBy, 'referral_bonus', BONUS_AMOUNT, 'completed']
-        );
-        
-        console.log(`🎁 Bonus de ${BONUS_AMOUNT}$ versé au parrain (ID: ${referredBy})`);
+      const BONUS_AMOUNT = 50.00;
+      await pool.query('UPDATE wallets SET balance = balance + $1, bonus_balance = bonus_balance + $1 WHERE user_id = $2', [BONUS_AMOUNT, referredBy]);
+      await pool.query('INSERT INTO transactions (user_id, type, amount, status) VALUES ($1, $2, $3, $4)', [referredBy, 'referral_bonus', BONUS_AMOUNT, 'completed']);
     }
 
+    // SIMULATION EMAIL DANS LA CONSOLE WSL
+    console.log("-----------------------------------------");
+    console.log(`NOUVEL INSCRIT : ${email}`);
+    console.log(`CODE DE VÉRIFICATION OTP : ${otp}`);
+    console.log("-----------------------------------------");
+
     res.status(201).json({
-      message: "Utilisateur créé avec succès",
-      user: newUser.rows[0]
+      message: "Compte créé. Veuillez vérifier votre email.",
+      email: email // On renvoie l'email pour aider le frontend
     });
 
   } catch (error) {
@@ -76,42 +67,41 @@ export const register = async (req: Request, res: Response) => {
   }
 };
 
-// Ajoute "login" à tes imports de fonctions existants
 export const login = async (req: Request, res: Response) => {
   const { email, password } = req.body;
 
   try {
-    // 1. Chercher l'utilisateur
     const userResult = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-    
     if (userResult.rows.length === 0) {
       return res.status(401).json({ message: "Identifiants invalides." });
     }
 
     const user = userResult.rows[0];
 
-    // 2. Vérifier le mot de passe (Comparaison du hash)
+    // VERROU SÉCURITÉ : Vérifier si l'email est validé
+    if (user.is_verified === false) {
+      return res.status(403).json({ 
+        message: "Votre compte n'est pas encore vérifié. Veuillez entrer le code reçu par email.",
+        requireVerification: true,
+        email: user.email
+      });
+    }
+
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
       return res.status(401).json({ message: "Identifiants invalides." });
     }
 
-    // 3. Créer le Token JWT (Expire dans 24h)
     const token = jwt.sign(
       { id: user.id, email: user.email, isAdmin: user.is_admin },
       process.env.JWT_SECRET as string,
       { expiresIn: '24h' }
     );
 
-    // 4. Envoyer la réponse (sans le password_hash !)
     res.json({
       message: "Connexion réussie",
       token,
-      user: {
-        id: user.id,
-        email: user.email,
-        referral_code: user.referral_code
-      }
+      user: { id: user.id, email: user.email, referral_code: user.referral_code }
     });
 
   } catch (error) {
@@ -120,21 +110,40 @@ export const login = async (req: Request, res: Response) => {
   }
 };
 
+export const verifyOTP = async (req: Request, res: Response) => {
+  const { email, code } = req.body;
+  try {
+    const userResult = await pool.query(
+      'SELECT * FROM users WHERE email = $1 AND otp_code = $2',
+      [email, code]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(400).json({ message: "Code de vérification incorrect." });
+    }
+
+    // On valide l'utilisateur et on vide l'OTP
+    await pool.query(
+      'UPDATE users SET is_verified = TRUE, otp_code = NULL WHERE email = $1',
+      [email]
+    );
+
+    res.json({ message: "Votre compte a été vérifié avec succès !" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erreur de vérification." });
+  }
+};
+
 export const getMe = async (req: AuthRequest, res: Response) => {
   try {
-    // Grâce au middleware, on a l'ID dans req.user
     const userResult = await pool.query(
       'SELECT id, email, referral_code, is_admin FROM users WHERE id = $1',
       [req.user?.id]
     );
-
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ message: "Utilisateur non trouvé." });
-    }
-
+    if (userResult.rows.length === 0) return res.status(404).json({ message: "Utilisateur non trouvé." });
     res.json(userResult.rows[0]);
   } catch (error) {
     res.status(500).json({ message: "Erreur serveur." });
   }
 };
-

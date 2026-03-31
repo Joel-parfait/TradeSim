@@ -1,65 +1,163 @@
-import Image from "next/image";
+"use client";
+import React, { useState } from 'react';
+import { Mail, Lock, TrendingUp, Eye, EyeOff, User, Gift, CheckCircle } from 'lucide-react';
+import api from '@/lib/api';
+import { useRouter } from 'next/navigation';
 
-export default function Home() {
+export default function AuthPage() {
+  // --- ÉTATS DE NAVIGATION ---
+  const [step, setStep] = useState('auth'); // 'auth' (formulaire) ou 'verify' (OTP)
+  const [isLogin, setIsLogin] = useState(true);
+  
+  // --- ÉTATS DES CHAMPS ---
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('');
+  const [referralCode, setReferralCode] = useState('');
+  const [otp, setOtp] = useState(''); // État pour stocker le code à 6 chiffres
+  
+  const [showPassword, setShowPassword] = useState(false);
+  const router = useRouter();
+
+  // --- LOGIQUE LOGIN ---
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await api.post('/auth/login', { email, password });
+      
+      // Si le backend dit que le compte n'est pas vérifié, on bascule sur l'écran OTP
+      if (res.data.requireVerification) {
+        setStep('verify');
+        return;
+      }
+
+      localStorage.setItem('token', res.data.token);
+      router.push('/dashboard');
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Erreur de connexion");
+    }
+  };
+
+  // --- LOGIQUE REGISTER ---
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.post('/auth/register', { username, email, password, referralCode });
+      // Une fois inscrit, on ne connecte pas, on demande le code !
+      setStep('verify'); 
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Erreur lors de l'inscription");
+    }
+  };
+
+  // --- LOGIQUE VÉRIFICATION OTP ---
+  const handleVerifyOTP = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.post('/auth/verify-otp', { email, code: otp });
+      alert("Email vérifié ! Connectez-vous maintenant.");
+      setStep('auth');
+      setIsLogin(true);
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Code invalide");
+    }
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 text-white font-sans">
+      
+      {/* Logo & Header */}
+      <div className="flex flex-col items-center mb-10 text-center">
+        <div className="w-16 h-16 bg-gradient-to-br from-primary-start to-primary-end rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-blue-500/10">
+          <TrendingUp size={32} className="text-white" />
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+        <h1 className="text-3xl font-bold mb-2 tracking-tight">CryptoSim</h1>
+        <p className="text-gray-400 text-sm">Security Level: 2FA Active</p>
+      </div>
+
+      <div className="w-full max-w-md bg-card p-6 md:p-8 rounded-2xl border border-white/5 shadow-xl">
+        
+        {/* CONDITION : Si on est en mode AUTH */}
+        {step === 'auth' ? (
+          <>
+            <div className="flex bg-black/40 p-1 rounded-xl mb-8">
+              <button onClick={() => setIsLogin(true)} className={`flex-1 py-2.5 rounded-lg text-sm transition-all ${isLogin ? 'bg-white/10 text-white' : 'text-gray-500'}`}>Login</button>
+              <button onClick={() => setIsLogin(false)} className={`flex-1 py-2.5 rounded-lg text-sm transition-all ${!isLogin ? 'bg-white/10 text-white' : 'text-gray-500'}`}>Register</button>
+            </div>
+
+            <form onSubmit={isLogin ? handleLogin : handleRegister} className="space-y-5">
+              {!isLogin && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-2 uppercase">Username</label>
+                  <div className="relative">
+                    <User className="absolute left-3.5 top-3.5 text-gray-600" size={18} />
+                    <input type="text" placeholder="Username" className="w-full bg-black border border-white/10 rounded-xl py-3.5 pl-11 text-sm outline-none" value={username} onChange={(e) => setUsername(e.target.value)} required />
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-2 uppercase">Email</label>
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-3.5 text-gray-600" size={18} />
+                  <input type="email" placeholder="Enter email" className="w-full bg-black border border-white/10 rounded-xl py-3.5 pl-11 text-sm outline-none" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-2 uppercase">Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-3.5 text-gray-600" size={18} />
+                  <input type={showPassword ? "text" : "password"} placeholder="Password" className="w-full bg-black border border-white/10 rounded-xl py-3.5 pl-11 pr-12 text-sm outline-none" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3.5 top-3.5 text-gray-600">
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              {!isLogin && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-2 uppercase">Referral Code</label>
+                  <div className="relative">
+                    <Gift className="absolute left-3.5 top-3.5 text-gray-600" size={18} />
+                    <input type="text" placeholder="Optional" className="w-full bg-black border border-white/10 rounded-xl py-3.5 pl-11 text-sm outline-none" value={referralCode} onChange={(e) => setReferralCode(e.target.value.toUpperCase())} />
+                  </div>
+                </div>
+              )}
+
+              <button type="submit" className="w-full py-4 bg-gradient-to-r from-primary-start to-primary-end rounded-xl font-semibold shadow-lg hover:brightness-110">
+                {isLogin ? "Login" : "Create Account"}
+              </button>
+            </form>
+          </>
+        ) : (
+          /* CONDITION : Si on est en mode VERIFY (OTP) */
+          <div className="text-center py-4">
+            <CheckCircle className="mx-auto mb-4 text-primary-start" size={48} />
+            <h2 className="text-2xl font-bold mb-2">Check your email</h2>
+            <p className="text-gray-400 text-sm mb-8">We sent a 6-digit code to <br/><span className="text-white">{email}</span></p>
+            
+            <form onSubmit={handleVerifyOTP} className="space-y-6">
+              <input 
+                type="text" 
+                maxLength={6}
+                placeholder="000000"
+                className="w-full bg-black border border-white/10 rounded-xl py-4 text-center text-3xl tracking-[0.5em] font-bold text-primary-start outline-none"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value)}
+                required
+              />
+              <button type="submit" className="w-full py-4 bg-gradient-to-r from-primary-start to-primary-end rounded-xl font-semibold shadow-lg">
+                Verify Account
+              </button>
+            </form>
+            
+            <button onClick={() => setStep('auth')} className="mt-6 text-sm text-gray-500 hover:text-white transition-colors">
+              Back to Login
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
