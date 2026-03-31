@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Mail, Lock, TrendingUp, Eye, EyeOff, User, Gift, CheckCircle } from 'lucide-react';
 import api from '@/lib/api';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 
 export default function AuthPage() {
   // --- ÉTATS DE NAVIGATION ---
@@ -34,7 +35,7 @@ export default function AuthPage() {
       localStorage.setItem('token', res.data.token);
       router.push('/dashboard');
     } catch (err: any) {
-      alert(err.response?.data?.message || "Erreur de connexion");
+      toast.error(err.response?.data?.message || "Erreur de connexion");
     }
   };
 
@@ -46,7 +47,7 @@ export default function AuthPage() {
       // Une fois inscrit, on ne connecte pas, on demande le code !
       setStep('verify'); 
     } catch (err: any) {
-      alert(err.response?.data?.message || "Erreur lors de l'inscription");
+      toast.error(err.response?.data?.message || "Erreur lors de l'inscription");
     }
   };
 
@@ -55,11 +56,11 @@ export default function AuthPage() {
     e.preventDefault();
     try {
       await api.post('/auth/verify-otp', { email, code: otp });
-      alert("Email vérifié ! Connectez-vous maintenant.");
+      toast.success("Email vérifié ! Connectez-vous maintenant.");
       setStep('auth');
       setIsLogin(true);
     } catch (err: any) {
-      alert(err.response?.data?.message || "Code invalide");
+      toast.error(err.response?.data?.message || "Code invalide");
     }
   };
 
