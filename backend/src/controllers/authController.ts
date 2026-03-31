@@ -46,6 +46,25 @@ export const register = async (req: Request, res: Response) => {
       [userId, 100.00]
     );
 
+    // Dans la fonction register, après avoir créé le Wallet du nouvel utilisateur (userId) :
+    if (referredBy) {
+        const BONUS_AMOUNT = 50.00; // Montant du bonus de parrainage
+        
+        // 1. Ajouter le bonus au portefeuille du parrain
+        await pool.query(
+            'UPDATE wallets SET balance = balance + $1, bonus_balance = bonus_balance + $1 WHERE user_id = $2',
+            [BONUS_AMOUNT, referredBy]
+        );
+
+        // 2. Enregistrer la transaction pour l'historique du parrain
+        await pool.query(
+            'INSERT INTO transactions (user_id, type, amount, status) VALUES ($1, $2, $3, $4)',
+            [referredBy, 'referral_bonus', BONUS_AMOUNT, 'completed']
+        );
+        
+        console.log(`🎁 Bonus de ${BONUS_AMOUNT}$ versé au parrain (ID: ${referredBy})`);
+    }
+
     res.status(201).json({
       message: "Utilisateur créé avec succès",
       user: newUser.rows[0]
@@ -118,3 +137,4 @@ export const getMe = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: "Erreur serveur." });
   }
 };
+
