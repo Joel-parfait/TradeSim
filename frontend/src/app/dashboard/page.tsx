@@ -1,21 +1,26 @@
 "use client";
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, TrendingUp, Wallet, Users, Trophy, UserCircle, 
-  LogOut, Menu, X, ArrowUpRight, ArrowDownRight, Bell, Search 
+  LogOut, Menu, X 
 } from 'lucide-react';
-import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts';
 import api from '@/lib/api';
 import { toast } from 'sonner';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
+import Link from 'next/link';
 
 const CRYPTO_LIST = [
   { symbol: 'BTC', name: 'Bitcoin', color: '#f97316' },
   { symbol: 'ETH', name: 'Ethereum', color: '#3b82f6' },
-  { symbol: 'SOL', name: 'Solana', color: '#8b5cf6' },
   { symbol: 'BNB', name: 'BNB', color: '#eab308' },
-  { symbol: 'XRP', name: 'Ripple', color: '#22d3ee' },
+  { symbol: 'SOL', name: 'Solana', color: '#8b5cf6' },
+  { symbol: 'XRP', name: 'Ripple', color: '#2389ff' },
   { symbol: 'ADA', name: 'Cardano', color: '#2563eb' },
+  { symbol: 'AVAX', name: 'Avalanche', color: '#e84142' },
+  { symbol: 'DOT', name: 'Polkadot', color: '#e6007a' },
+  { symbol: 'TRX', name: 'TRON', color: '#ff060a' },
+  { symbol: 'DOGE', name: 'Dogecoin', color: '#ba9f33' },
 ];
 
 export default function DashboardPage() {
@@ -24,18 +29,15 @@ export default function DashboardPage() {
   const [marketData, setMarketData] = useState<any>({});
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [chartData, setChartData] = useState<any[]>([]);
+  
   const router = useRouter();
+  const pathname = usePathname();
 
-  // 1. CHARGEMENT UTILISATEUR + TOAST DE BIENVENUE
+  // 1. CHARGEMENT UTILISATEUR
   useEffect(() => {
     api.get('/auth/me')
       .then(res => {
         setUser(res.data);
-        const name = res.data.username || res.data.email.split('@')[0];
-        // Le Toast "Welcome" exact que tu as demandé
-        toast.success(`Welcome ${name}`, {
-            description: "Synchronisation avec le marché réussie."
-        });
       })
       .catch(() => {
         toast.error("Session expirée");
@@ -43,7 +45,7 @@ export default function DashboardPage() {
       });
   }, [router]);
 
-  // 2. RÉCUPÉRATION PRIX TEMPS RÉEL (BINANCE)
+  // 2. RÉCUPÉRATION PRIX BINANCE (Pooling 10s)
   useEffect(() => {
     const fetchPrices = async () => {
       try {
@@ -67,7 +69,7 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // 3. MISE À JOUR DU GRAPHIQUE
+  // 3. SIMULATION GRAPHIQUE
   useEffect(() => {
     if (marketData[selectedCrypto]) {
       const basePrice = marketData[selectedCrypto].price;
@@ -79,10 +81,11 @@ export default function DashboardPage() {
     }
   }, [selectedCrypto, marketData]);
 
-  const formatBinance = (val: number) => {
+  const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('en-US', {
-      minimumFractionDigits: val < 1 ? 4 : 2,
-      maximumFractionDigits: val < 1 ? 4 : 2,
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
     }).format(val);
   };
 
@@ -92,42 +95,58 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-[#0B0E11] text-[#EAECEF] font-sans flex flex-col overflow-x-hidden">
       
-      {/* --- NAVBAR RESPONSIVE --- */}
-      <nav className="border-b border-white/5 bg-[#181A20] sticky top-0 z-[100] w-full">
-        <div className="max-w-[1400px] mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2 font-bold text-xl text-primary-start">
-              <TrendingUp size={24} /> <span className="hidden xs:block tracking-tighter">CryptoSim</span>
+      {/* --- NAVBAR OPTIMISÉE (DESIGN IMAGE) --- */}
+      <nav className="bg-[#121212] border-b border-white/5 sticky top-0 z-[100] w-full">
+        <div className="max-w-[1400px] mx-auto px-6 h-16 flex items-center justify-between">
+          
+          <div className="flex items-center gap-10">
+            {/* Logo */}
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-gradient-to-tr from-blue-600 to-purple-500 rounded-lg flex items-center justify-center">
+                <TrendingUp size={18} className="text-white" />
+              </div>
+              <span className="font-bold text-xl tracking-tight text-white">CryptoSim</span>
             </div>
-            <div className="hidden lg:flex items-center gap-1">
-              <NavLink label="Dashboard" active icon={<LayoutDashboard size={16}/>} />
-              <NavLink label="Trade" icon={<TrendingUp size={16}/>} />
-              <NavLink label="Wallet" icon={<Wallet size={16}/>} />
-              <NavLink label="Referrals" icon={<Users size={16}/>} />
-              <NavLink label="Leaderboard" icon={<Trophy size={16}/>} />
+
+            {/* Desktop Navigation */}
+            <div className="hidden lg:flex items-center gap-2">
+              <NavLink href="/dashboard" label="Dashboard" active={pathname === '/dashboard'} icon={<LayoutDashboard size={18}/>} />
+              <NavLink href="/trade" label="Trade" active={pathname === '/trade'} icon={<TrendingUp size={18}/>} />
+              <NavLink href="/wallet" label="Wallet" active={pathname === '/wallet'} icon={<Wallet size={18}/>} />
+              <NavLink href="/referrals" label="Referrals" active={pathname === '/referrals'} icon={<Users size={18}/>} />
+              <NavLink href="/leaderboard" label="Leaderboard" active={pathname === '/leaderboard'} icon={<Trophy size={18}/>} />
+              <NavLink href="/account" label="Account" active={pathname === '/account'} icon={<UserCircle size={18}/>} />
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="text-right hidden sm:block border-r border-white/10 pr-4">
-              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Balance</p>
-              <p className="text-sm font-bold text-[#00C087]">${formatBinance(user?.balance ?? 0)}</p>
+          <div className="flex items-center gap-6">
+            {/* Balance */}
+            <div className="text-right hidden sm:block">
+              <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider leading-tight">Balance</p>
+              <p className="text-base font-bold text-white tracking-tight">{formatCurrency(user?.balance ?? 10000)}</p>
             </div>
+
+            {/* Logout */}
+            <button 
+              onClick={() => { localStorage.clear(); router.push('/'); }}
+              className="text-gray-400 hover:text-white transition-colors"
+            >
+              <LogOut size={20}/>
+            </button>
+
+            {/* Mobile Toggle */}
             <button className="p-2 text-gray-400 lg:hidden" onClick={() => setIsMenuOpen(!isMenuOpen)}>
               {isMenuOpen ? <X /> : <Menu />}
-            </button>
-            <button className="hidden lg:block text-gray-500 hover:text-red-400" onClick={() => { localStorage.clear(); router.push('/'); }}>
-              <LogOut size={20}/>
             </button>
           </div>
         </div>
 
+        {/* Mobile Menu */}
         {isMenuOpen && (
-          <div className="lg:hidden absolute top-16 left-0 w-full bg-[#181A20] border-b border-white/5 p-4 flex flex-col gap-2 animate-in slide-in-from-top duration-300">
-            <NavLink label="Dashboard" active fullWidth />
-            <NavLink label="Trade" fullWidth />
-            <NavLink label="Wallet" fullWidth />
-            <NavLink label="Account" fullWidth />
+          <div className="lg:hidden bg-[#181A20] border-b border-white/5 p-4 flex flex-col gap-2">
+            <NavLink href="/dashboard" label="Dashboard" active={pathname === '/dashboard'} fullWidth />
+            <NavLink href="/trade" label="Trade" active={pathname === '/trade'} fullWidth />
+            <NavLink href="/wallet" label="Wallet" active={pathname === '/wallet'} fullWidth />
             <button className="flex items-center gap-3 p-3 text-red-400 font-bold" onClick={() => router.push('/')}>
               <LogOut size={18}/> Logout
             </button>
@@ -135,89 +154,70 @@ export default function DashboardPage() {
         )}
       </nav>
 
-      {/* --- CONTENT --- */}
-      <main className="max-w-[1400px] mx-auto p-4 md:p-8 w-full">
-        
-        {/* TITRES DEMANDÉS */}
-        <div className="mb-8">
-          <h1 className="text-3xl md:text-4xl font-black tracking-tight">
-            Welcome back, <span className="text-primary-start">{userName}!</span>
+      <main className="max-w-[1400px] mx-auto p-6 md:p-10 w-full">
+        {/* En-tête de bienvenue */}
+        <div className="mb-10">
+          <h1 className="text-3xl md:text-4xl font-bold">
+            Welcome back, <span className="text-blue-500">{userName}!</span>
           </h1>
-          <p className="text-gray-500 text-sm md:text-base font-medium mt-1">
-            Here's your trading overview
-          </p>
+          <p className="text-gray-400 mt-2">Here's your trading overview</p>
         </div>
 
-        {/* HEADER STATS */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-          <StatBox title="Available Balance" value={`$${formatBinance(user?.balance ?? 0)}`} color="text-white" />
-          <StatBox title="PNL (24h)" value={`$${formatBinance((user?.balance ?? 0) * 0.02)}`} subValue="+2.15%" subColor="text-[#00C087]" />
-          <StatBox title="Equity" value={`$${formatBinance(user?.balance ?? 0)}`} color="text-white" />
-        </div>
-
-        {/* LAYOUT GRAPHE / MARCHÉ */}
-        <div className="flex flex-col lg:flex-row gap-6">
-          
-          <div className="flex-[2] bg-[#181A20] rounded-3xl border border-white/5 p-5 md:p-8 min-w-0">
-            <div className="flex justify-between items-center mb-8">
-              <div>
-                <h2 className="text-2xl md:text-3xl font-black tracking-tighter">${formatBinance(marketData[selectedCrypto]?.price ?? 0)}</h2>
-                <span className={`text-xs font-bold px-2 py-1 rounded ${isPos ? 'bg-[#00C087]/10 text-[#00C087]' : 'bg-[#F6465D]/10 text-[#F6465D]'}`}>
-                  {isPos ? '▲' : '▼'} {marketData[selectedCrypto]?.change}%
-                </span>
-              </div>
-              <select 
-                value={selectedCrypto}
-                onChange={(e) => setSelectedCrypto(e.target.value)}
-                className="bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer"
-              >
-                {CRYPTO_LIST.map(c => <option key={c.symbol} value={c.symbol}>{c.symbol}</option>)}
-              </select>
-            </div>
-
-            <div className="h-[250px] md:h-[400px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData}>
-                  <defs>
-                    <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={isPos ? '#00C087' : '#F6465D'} stopOpacity={0.2}/>
-                      <stop offset="95%" stopColor={isPos ? '#00C087' : '#F6465D'} stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <Tooltip contentStyle={{backgroundColor: '#1e2329', border: 'none', borderRadius: '8px'}} />
-                  <Area type="monotone" dataKey="price" stroke={isPos ? '#00C087' : '#F6465D'} strokeWidth={3} fill="url(#colorPrice)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Chart Section */}
+          <div className="lg:col-span-2 bg-[#181A20] rounded-3xl border border-white/5 p-6">
+             <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-3xl font-bold">${marketData[selectedCrypto]?.price.toLocaleString() ?? '---'}</h2>
+                  <p className={`text-sm font-bold ${isPos ? 'text-green-500' : 'text-red-500'}`}>
+                    {isPos ? '+' : ''}{marketData[selectedCrypto]?.change}% (24h)
+                  </p>
+                </div>
+                <select 
+                  value={selectedCrypto}
+                  onChange={(e) => setSelectedCrypto(e.target.value)}
+                  className="bg-[#0B0E11] border border-white/10 rounded-xl px-4 py-2 text-sm outline-none"
+                >
+                  {CRYPTO_LIST.map(c => <option key={c.symbol} value={c.symbol}>{c.symbol}</option>)}
+                </select>
+             </div>
+             <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData}>
+                    <defs>
+                      <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={isPos ? '#10b981' : '#ef4444'} stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor={isPos ? '#10b981' : '#ef4444'} stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <Area type="monotone" dataKey="price" stroke={isPos ? '#10b981' : '#ef4444'} strokeWidth={2} fill="url(#colorPrice)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+             </div>
           </div>
 
-          {/* MARKET OVERVIEW */}
-          <div className="flex-1 bg-[#181A20] rounded-3xl border border-white/5 overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-white/5 flex justify-between items-center bg-white/[0.01]">
-              <h3 className="font-bold">Market Overview</h3>
-              <button className="px-4 py-2 bg-primary-start rounded-xl text-xs font-bold shadow-lg shadow-blue-500/10 hover:scale-105 transition-transform">
-                Start Trading
-              </button>
-            </div>
-            <div className="flex-grow overflow-y-auto max-h-[450px] custom-scrollbar">
-              {CRYPTO_LIST.map((crypto) => {
-                const data = marketData[crypto.symbol];
-                return (
-                  <div key={crypto.symbol} onClick={() => setSelectedCrypto(crypto.symbol)} className={`p-4 flex items-center justify-between cursor-pointer transition-all ${selectedCrypto === crypto.symbol ? 'bg-white/[0.05]' : 'hover:bg-white/[0.02]'}`}>
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-xs" style={{backgroundColor: `${crypto.color}20`, color: crypto.color}}>{crypto.symbol[0]}</div>
-                      <div>
-                        <p className="font-bold text-sm">{crypto.name}</p>
-                        <p className="text-[10px] text-gray-500 uppercase">{crypto.symbol} / USDT</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold">${formatBinance(data?.price ?? 0)}</p>
-                      <p className={`text-[10px] font-bold ${data?.change >= 0 ? 'text-[#00C087]' : 'text-[#F6465D]'}`}>{data?.change}%</p>
+          {/* Market List */}
+          <div className="bg-[#181A20] rounded-3xl border border-white/5 overflow-hidden flex flex-col">
+            <div className="p-5 border-b border-white/5 font-bold">Market Overview</div>
+            <div className="overflow-y-auto max-h-[400px]">
+              {CRYPTO_LIST.map((crypto) => (
+                <div 
+                  key={crypto.symbol} 
+                  onClick={() => setSelectedCrypto(crypto.symbol)}
+                  className={`p-4 flex items-center justify-between cursor-pointer hover:bg-white/[0.02] transition-colors ${selectedCrypto === crypto.symbol ? 'bg-white/[0.05]' : ''}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-[10px]" style={{backgroundColor: `${crypto.color}20`, color: crypto.color}}>{crypto.symbol[0]}</div>
+                    <div>
+                      <p className="font-bold text-sm">{crypto.name}</p>
+                      <p className="text-[10px] text-gray-500 uppercase">{crypto.symbol} / USDT</p>
                     </div>
                   </div>
-                );
-              })}
+                  <div className="text-right text-sm">
+                    <p className="font-bold">${marketData[crypto.symbol]?.price ?? '0.00'}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -226,20 +226,22 @@ export default function DashboardPage() {
   );
 }
 
-function NavLink({ label, icon, active, fullWidth }: any) {
+// COMPOSANT NAVLINK AJUSTÉ
+function NavLink({ href, label, icon, active, fullWidth }: any) {
   return (
-    <button className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${fullWidth ? 'w-full' : ''} ${active ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-white hover:bg-white/5'}`}>
-      {icon} {label}
-    </button>
-  );
-}
-
-function StatBox({ title, value, subValue, color, subColor }: any) {
-  return (
-    <div className="bg-[#181A20] border border-white/5 p-6 rounded-3xl flex flex-col justify-center min-h-[120px]">
-      <p className="text-gray-500 text-[10px] uppercase font-black tracking-widest mb-1">{title}</p>
-      <p className={`text-2xl md:text-3xl font-black tracking-tighter ${color}`}>{value}</p>
-      {subValue && <p className={`text-[10px] mt-1 font-bold ${subColor}`}>{subValue}</p>}
-    </div>
+    <Link 
+      href={href}
+      className={`
+        flex items-center gap-2.5 px-4 py-2 rounded-xl text-sm font-medium transition-all
+        ${fullWidth ? 'w-full' : ''} 
+        ${active 
+          ? 'bg-[#1E1E1E] text-white shadow-sm ring-1 ring-white/10' 
+          : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+        }
+      `}
+    >
+      {icon && <span className={active ? 'text-white' : 'text-gray-500'}>{icon}</span>}
+      {label}
+    </Link>
   );
 }

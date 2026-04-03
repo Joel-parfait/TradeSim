@@ -2,41 +2,56 @@ import { Response } from 'express';
 import pool from '../config/db.js';
 import { AuthRequest } from '../middleware/authMiddleware.js';
 
+// --- LOGIQUE CORRIGÉE : MULTIPLICATEUR DYNAMIQUE ---
 const calculateTarget = (amount: number): number => {
-  if (amount >= 1000) return 13000;
-  if (amount >= 500) return 6000;
-  if (amount >= 300) return 3500;
-  if (amount >= 100) return 1000;
+  if (amount >= 1000) return amount * 13;   // Ex: 1000 -> 13000 (x13)
+  if (amount >= 500) return amount * 12;    // Ex: 500 -> 6000 (x12)
+  if (amount >= 300) return amount * 11.66; // Ex: 300 -> 3500 (approx x11.66)
+  if (amount >= 100) return amount * 10;    // Ex: 100 -> 1000 (x10) | 200 -> 2000
   return amount * 2;
 };
 
 export const startTrade = async (req: AuthRequest, res: Response) => {
-  // 1. Extraction et conversion forcée pour éviter les NaN
   const amount = parseFloat(req.body.amount);
   const crypto_symbol = req.body.crypto_symbol;
   const userId = req.user?.id;
 
-  // 2. Vérification de sécurité
   if (!amount || isNaN(amount) || !crypto_symbol) {
     return res.status(400).json({ 
       message: "Données invalides. 'amount' (nombre) et 'crypto_symbol' (string) sont requis." 
     });
   }
 
+  // Sécurité supplémentaire : Montant minimum
+  if (amount < 100) {
+    return res.status(400).json({ message: "Le montant minimum pour trader est de 100$." });
+  }
+
   try {
+    // Vérifier si un trade est déjà en cours pour cet utilisateur
+    const activeCheck = await pool.query(
+      "SELECT id FROM trades WHERE user_id = $1 AND status = 'running'",
+      [userId]
+    );
+
+    if (activeCheck.rows.length > 0) {
+      return res.status(400).json({ message: "Vous avez déjà un trade en cours." });
+    }
+
     const wallet = await pool.query('SELECT balance FROM wallets WHERE user_id = $1', [userId]);
     
-    if (wallet.rows.length === 0 || wallet.rows[0].balance < amount) {
+    if (wallet.rows.length === 0 || parseFloat(wallet.rows[0].balance) < amount) {
       return res.status(400).json({ message: "Solde insuffisant ou portefeuille introuvable." });
     }
 
     // 3. Débit du solde
     await pool.query('UPDATE wallets SET balance = balance - $1 WHERE user_id = $2', [amount, userId]);
 
+    // CALCUL PROPORTIONNEL
     const targetProfit = calculateTarget(amount);
     const endTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-    // 4. Insertion avec toutes les valeurs explicitées
+    // 4. Insertion avec targetProfit dynamique
     const newTrade = await pool.query(
       `INSERT INTO trades 
       (user_id, crypto_symbol, amount_invested, target_profit, start_price, current_simulated_price, end_time, status) 
@@ -44,12 +59,18 @@ export const startTrade = async (req: AuthRequest, res: Response) => {
       [userId, crypto_symbol, amount, targetProfit, 50000.0, 50000.0, endTime, 'running']
     );
 
-    res.status(201).json({ message: "Robot démarré avec succès", trade: newTrade.rows[0] });
+    res.status(201).json({ 
+      message: "Robot démarré avec succès", 
+      trade: newTrade.rows[0],
+      target_profit: targetProfit 
+    });
   } catch (error) {
     console.error("Détail erreur SQL:", error);
-    res.status(500).json({ message: "Erreur serveur lors de la création du trade." });
+    res.status(500).json({ message: "Erreur serveur lors du lancement." });
   }
 };
+
+
 // Récupérer les robots en cours d'un utilisateur
 export const getActiveTrades = async (req: AuthRequest, res: Response) => {
   const userId = req.user?.id;
