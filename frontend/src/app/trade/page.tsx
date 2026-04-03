@@ -56,11 +56,9 @@ export default function TradePage() {
         const durationMs = 24 * 60 * 60 * 1000;
         const now = new Date().getTime();
         
-        if (now >= (startTime + durationMs)) {
-            setIsFinished(true);
-        } else {
-            setIsFinished(false);
-        }
+        // Calcul du statut terminé
+        const finishedStatus = now >= (startTime + durationMs);
+        setIsFinished(finishedStatus);
 
         const elapsed = now - startTime;
         const totalTargetProfit = Math.max(0, trade.target_profit - trade.amount_invested);
@@ -77,12 +75,18 @@ export default function TradePage() {
         }
         setChartData(historyPoints);
 
+        // --- CORRECTION : GÉNÉRATION DES HEURES BASÉES SUR LE PASSÉ ---
+        // Si le trade est fini, on génère les transactions juste avant l'heure de fin.
+        // Sinon, on les génère juste avant "maintenant".
+        const referenceTime = finishedStatus ? (startTime + durationMs) : now;
+
         const initialTrades = Array.from({ length: 6 }, (_, i) => ({
-            id: Date.now() - (i * 15000),
+            id: referenceTime - (i * 150000),
             pair: `${trade.crypto_symbol}/USDT`,
             type: Math.random() > 0.15 ? 'BUY' : 'SELL',
             profit: (Math.random() * 8 + 2).toFixed(2),
-            time: new Date(now - (i * 120000)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            // On utilise referenceTime pour que l'heure soit fixe à l'actualisation
+            time: new Date(referenceTime - (i * 300000)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }));
         setLiveTrades(initialTrades);
 
@@ -181,19 +185,13 @@ export default function TradePage() {
     }
   };
 
-  // --- LOGIQUE DU BOUTON WITHDRAW (MISE À JOUR) ---
   const handleWithdraw = () => {
-    // Étape 1 : Si aucun trade n'existe (IDLE)
     if (!activeTrade) {
       return toast.error("Veuillez d'abord démarrer un trade");
     }
-
-    // Étape 2 : Si le trade est en cours (RUNNING)
     if (activeTrade && !isFinished) {
       return toast.error("Veuillez patienter jusqu'à la fin du trade");
     }
-
-    // On passera à la suite (créditer le compte) lors de la prochaine étape
   };
 
   const formatCurrency = (val: number) => {
