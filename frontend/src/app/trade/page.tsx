@@ -151,7 +151,7 @@ export default function TradePage() {
 
   const handleStartBot = async () => {
     if (activeTrade && isFinished) {
-        return toast.error("Veuillez d'abord retirer votre solde");
+        return toast.error("Veuillez d'abord retirer votre gain");
     }
 
     const numAmount = Number(amount);
@@ -181,14 +181,19 @@ export default function TradePage() {
     }
   };
 
-  // --- LOGIQUE DU BOUTON WITHDRAW ---
+  // --- LOGIQUE DU BOUTON WITHDRAW (MISE À JOUR) ---
   const handleWithdraw = () => {
     // Étape 1 : Si aucun trade n'existe (IDLE)
     if (!activeTrade) {
       return toast.error("Veuillez d'abord démarrer un trade");
     }
 
-    // On s'arrête ici pour le moment comme demandé
+    // Étape 2 : Si le trade est en cours (RUNNING)
+    if (activeTrade && !isFinished) {
+      return toast.error("Veuillez patienter jusqu'à la fin du trade");
+    }
+
+    // On passera à la suite (créditer le compte) lors de la prochaine étape
   };
 
   const formatCurrency = (val: number) => {
