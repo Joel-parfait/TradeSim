@@ -7,6 +7,7 @@ import walletRoutes from './routes/walletRoutes.js';
 import tradeRoutes from './routes/tradeRoutes.js'; 
 import adminRoutes from './routes/adminRoutes.js';
 import referralRoutes from './routes/referralRoutes.js';
+import leaderboardRoutes from './routes/leaderboardRoutes.js';
 import { updateSimulatedTrades } from './utils/simulationWorker.js';
 
 dotenv.config();
@@ -23,6 +24,7 @@ app.use('/api/wallet', walletRoutes);
 app.use('/api/trades', tradeRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/referrals', referralRoutes);
+app.use('/api/leaderboard', leaderboardRoutes);
 
 // Santé
 app.get('/api/health', async (req, res) => {
