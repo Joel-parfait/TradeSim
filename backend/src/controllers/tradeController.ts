@@ -11,6 +11,7 @@ const calculateTarget = (amount: number): number => {
   return amount * 2;
 };
 
+// Lancer un nouveau trade
 export const startTrade = async (req: AuthRequest, res: Response) => {
   const amount = parseFloat(req.body.amount);
   const crypto_symbol = req.body.crypto_symbol;
@@ -22,13 +23,12 @@ export const startTrade = async (req: AuthRequest, res: Response) => {
     });
   }
 
-  // Sécurité supplémentaire : Montant minimum
   if (amount < 100) {
     return res.status(400).json({ message: "Le montant minimum pour trader est de 100$." });
   }
 
   try {
-    // Vérifier si un trade est déjà en cours pour cet utilisateur
+    // Vérifier si un trade est déjà en cours
     const activeCheck = await pool.query(
       "SELECT id FROM trades WHERE user_id = $1 AND status = 'running'",
       [userId]
@@ -44,15 +44,13 @@ export const startTrade = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: "Solde insuffisant ou portefeuille introuvable." });
     }
 
-    // 3. Débit du solde
+    // Débit du solde
     await pool.query('UPDATE wallets SET balance = balance - $1 WHERE user_id = $2', [amount, userId]);
 
-    // CALCUL PROPORTIONNEL
     const targetProfit = calculateTarget(amount);
-    // const endTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    const endTime = new Date(Date.now() + 60 * 1000); // 1 minute EXACTEMENT
+    // Modifier ici pour 24h ou 1min selon tes besoins de test
+    const endTime = new Date(Date.now() + 60 * 1000); 
 
-    // 4. Insertion avec targetProfit dynamique
     const newTrade = await pool.query(
       `INSERT INTO trades 
       (user_id, crypto_symbol, amount_invested, target_profit, start_price, current_simulated_price, end_time, status) 
@@ -71,11 +69,9 @@ export const startTrade = async (req: AuthRequest, res: Response) => {
   }
 };
 
-
-// Récupérer les robots en cours d'un utilisateur
+// Récupérer UNIQUEMENT le robot en cours (pour la page Trade)
 export const getActiveTrades = async (req: AuthRequest, res: Response) => {
   const userId = req.user?.id;
-
   try {
     const trades = await pool.query(
       "SELECT * FROM trades WHERE user_id = $1 AND status = 'running' ORDER BY start_time DESC",
@@ -87,13 +83,13 @@ export const getActiveTrades = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// Récupérer l'historique complet (terminés et annulés)
+// RÉCUPÉRER TOUT L'HISTORIQUE (Pour la page Wallet)
+// J'ai retiré le filtre "status != 'running'" pour que tu vois TOUT (actifs + finis)
 export const getTradeHistory = async (req: AuthRequest, res: Response) => {
   const userId = req.user?.id;
-
   try {
     const trades = await pool.query(
-      "SELECT * FROM trades WHERE user_id = $1 AND status != 'running' ORDER BY end_time DESC",
+      "SELECT * FROM trades WHERE user_id = $1 ORDER BY start_time DESC",
       [userId]
     );
     res.json(trades.rows);
@@ -102,11 +98,11 @@ export const getTradeHistory = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// Finaliser un trade et créditer le solde
 export const finalizeTrade = async (req: AuthRequest, res: Response) => {
   const userId = req.user?.id;
 
   try {
-    // 1. On récupère le trade en vérifiant qu'il est bien 'running'
     const tradeQuery = await pool.query(
       "SELECT * FROM trades WHERE user_id = $1 AND status = 'running' LIMIT 1",
       [userId]
@@ -120,9 +116,7 @@ export const finalizeTrade = async (req: AuthRequest, res: Response) => {
     const now = new Date();
     const endTime = new Date(trade.end_time);
 
-    // --- SÉCURITÉ RÉTABLIE --- 
-    // On compare l'heure actuelle du serveur avec l'heure de fin en BD
-    // On ajoute une petite marge de 2 secondes pour les décalages réseau
+    // Marge de 2 secondes pour éviter les erreurs de synchro
     if (now.getTime() < (endTime.getTime() - 2000)) {
       return res.status(400).json({ 
         message: "Sécurité : Le trade est encore en cours. Retrait impossible." 
@@ -131,19 +125,24 @@ export const finalizeTrade = async (req: AuthRequest, res: Response) => {
 
     await pool.query('BEGIN');
 
-    // On utilise UNIQUEMENT le montant stocké en base de données au début du trade
     const finalAmount = parseFloat(trade.target_profit);
 
-    // Crédit du portefeuille
+    // 1. Créditer le portefeuille
     await pool.query(
       "UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE user_id = $2",
       [finalAmount, userId]
     );
 
-    // Marquage du trade comme terminé
+    // 2. Marquer le trade comme terminé
     await pool.query(
       "UPDATE trades SET status = 'completed', end_time = NOW() WHERE id = $1",
       [trade.id]
+    );
+
+    // 3. Optionnel : Ajouter une ligne dans la table transactions pour un historique propre
+    await pool.query(
+      "INSERT INTO transactions (user_id, type, amount) VALUES ($1, $2, $3)",
+      [userId, 'trade_profit', finalAmount]
     );
 
     await pool.query('COMMIT');
