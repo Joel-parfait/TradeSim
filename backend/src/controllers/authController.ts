@@ -181,3 +181,74 @@ export const getMe = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: "Erreur Serveur", detail: error.message });
   }
 };
+
+export const updateProfile = async (req: AuthRequest, res: Response) => {
+  const { username, avatar_id } = req.body;
+  const userId = req.user?.id;
+
+  if (!userId) {
+    return res.status(401).json({ message: "Utilisateur non identifié" });
+  }
+
+  try {
+    // 1. Vérifier si le username est déjà pris par un autre utilisateur
+    if (username) {
+      const checkUser = await pool.query(
+        'SELECT id FROM users WHERE username = $1 AND id != $2',
+        [username, userId]
+      );
+      if (checkUser.rows.length > 0) {
+        return res.status(400).json({ message: "Ce nom d'utilisateur est déjà utilisé" });
+      }
+    }
+
+    // 2. Mise à jour du profil
+    const updatedUser = await pool.query(
+      `UPDATE users 
+       SET username = COALESCE($1, username), 
+           avatar_id = COALESCE($2, avatar_id) 
+       WHERE id = $3 
+       RETURNING id, username, email, avatar_id`,
+      [username, avatar_id, userId]
+    );
+
+    res.json({
+      message: "Profil mis à jour avec succès",
+      user: updatedUser.rows[0]
+    });
+  } catch (error) {
+    console.error("Erreur update-profile:", error);
+    res.status(500).json({ message: "Erreur lors de la mise à jour du profil" });
+  }
+};
+
+export const updatePassword = async (req: AuthRequest, res: Response) => {
+  const { currentPassword, newPassword } = req.body;
+  const userId = req.user?.id;
+
+  if (!userId) return res.status(401).json({ message: "Non autorisé" });
+
+  try {
+    // 1. Récupérer le mot de passe actuel en base de données
+    const userResult = await pool.query('SELECT password_hash FROM users WHERE id = $1', [userId]);
+    const user = userResult.rows[0];
+
+    // 2. Vérifier si le mot de passe actuel correspond
+    const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Le mot de passe actuel est incorrect." });
+    }
+
+    // 3. Hasher le nouveau mot de passe
+    const salt = await bcrypt.genSalt(10);
+    const newHashedPassword = await bcrypt.hash(newPassword, salt);
+
+    // 4. Mettre à jour en base de données
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHashedPassword, userId]);
+
+    res.json({ message: "Mot de passe mis à jour avec succès !" });
+  } catch (error) {
+    console.error("Erreur updatePassword:", error);
+    res.status(500).json({ message: "Erreur lors de la mise à jour du mot de passe." });
+  }
+};
