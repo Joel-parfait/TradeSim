@@ -1,13 +1,13 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; // Ajout de useEffect
 import { Mail, Lock, TrendingUp, Eye, EyeOff, User, Gift, CheckCircle } from 'lucide-react';
 import api from '@/lib/api';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation'; // Ajout de useSearchParams
 import { toast } from 'sonner';
 
 export default function AuthPage() {
   // --- ÉTATS DE NAVIGATION ---
-  const [step, setStep] = useState('auth'); // 'auth' (formulaire) ou 'verify' (OTP)
+  const [step, setStep] = useState('auth'); 
   const [isLogin, setIsLogin] = useState(true);
   
   // --- ÉTATS DES CHAMPS ---
@@ -15,23 +15,31 @@ export default function AuthPage() {
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
   const [referralCode, setReferralCode] = useState('');
-  const [otp, setOtp] = useState(''); // État pour stocker le code à 6 chiffres
+  const [otp, setOtp] = useState(''); 
   
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams(); // Hook pour lire l'URL
+
+  // --- LOGIQUE DE DÉTECTION DU PARRAINAGE ---
+  useEffect(() => {
+    const ref = searchParams.get('ref');
+    if (ref) {
+      setIsLogin(false); // Bascule sur le formulaire d'inscription
+      setReferralCode(ref.toUpperCase()); // Remplit le champ automatiquement
+      toast.info("Referral code applied!");
+    }
+  }, [searchParams]);
 
   // --- LOGIQUE LOGIN ---
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       const res = await api.post('/auth/login', { email, password });
-      
-      // Si le backend dit que le compte n'est pas vérifié, on bascule sur l'écran OTP
       if (res.data.requireVerification) {
         setStep('verify');
         return;
       }
-
       localStorage.setItem('token', res.data.token);
       router.push('/dashboard');
     } catch (err: any) {
@@ -44,7 +52,6 @@ export default function AuthPage() {
     e.preventDefault();
     try {
       await api.post('/auth/register', { username, email, password, referralCode });
-      // Une fois inscrit, on ne connecte pas, on demande le code !
       setStep('verify'); 
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Erreur lors de l'inscription");
@@ -56,11 +63,11 @@ export default function AuthPage() {
     e.preventDefault();
     try {
       await api.post('/auth/verify-otp', { email, code: otp });
-      toast.success("Email vérifié ! Connectez-vous maintenant.");
+      toast.success("Email verified! Log in now.");
       setStep('auth');
       setIsLogin(true);
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Code invalide");
+      toast.error(err.response?.data?.message || "Invalid code");
     }
   };
 
@@ -78,7 +85,6 @@ export default function AuthPage() {
 
       <div className="w-full max-w-md bg-card p-6 md:p-8 rounded-2xl border border-white/5 shadow-xl">
         
-        {/* CONDITION : Si on est en mode AUTH */}
         {step === 'auth' ? (
           <>
             <div className="flex bg-black/40 p-1 rounded-xl mb-8">
@@ -132,7 +138,6 @@ export default function AuthPage() {
             </form>
           </>
         ) : (
-          /* CONDITION : Si on est en mode VERIFY (OTP) */
           <div className="text-center py-4">
             <CheckCircle className="mx-auto mb-4 text-primary-start" size={48} />
             <h2 className="text-2xl font-bold mb-2">Check your email</h2>
