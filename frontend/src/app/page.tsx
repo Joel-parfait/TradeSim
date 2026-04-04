@@ -1,8 +1,8 @@
 "use client";
-import React, { useState, useEffect } from 'react'; // Ajout de useEffect
+import React, { useState, useEffect } from 'react';
 import { Mail, Lock, TrendingUp, Eye, EyeOff, User, Gift, CheckCircle } from 'lucide-react';
 import api from '@/lib/api';
-import { useRouter, useSearchParams } from 'next/navigation'; // Ajout de useSearchParams
+import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 
 export default function AuthPage() {
@@ -19,14 +19,14 @@ export default function AuthPage() {
   
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
-  const searchParams = useSearchParams(); // Hook pour lire l'URL
+  const searchParams = useSearchParams();
 
-  // --- LOGIQUE DE DÉTECTION DU PARRAINAGE ---
+  // --- DÉTECTION DU PARRAINAGE ---
   useEffect(() => {
     const ref = searchParams.get('ref');
     if (ref) {
-      setIsLogin(false); // Bascule sur le formulaire d'inscription
-      setReferralCode(ref.toUpperCase()); // Remplit le champ automatiquement
+      setIsLogin(false); 
+      setReferralCode(ref.toUpperCase());
       toast.info("Referral code applied!");
     }
   }, [searchParams]);
@@ -47,11 +47,23 @@ export default function AuthPage() {
     }
   };
 
-  // --- LOGIQUE REGISTER ---
+  // --- LOGIQUE REGISTER (MAINTENANT AVEC USERNAME SAUVEGARDÉ) ---
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Petite vérification de sécurité côté client
+    if (!username.trim()) {
+      return toast.error("Veuillez choisir un nom d'utilisateur");
+    }
+
     try {
-      await api.post('/auth/register', { username, email, password, referralCode });
+      // Le backend mis à jour va maintenant recevoir et stocker 'username'
+      await api.post('/auth/register', { 
+        username: username.trim(), 
+        email: email.toLowerCase().trim(), 
+        password, 
+        referralCode 
+      });
       setStep('verify'); 
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Erreur lors de l'inscription");
@@ -74,7 +86,6 @@ export default function AuthPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 text-white font-sans">
       
-      {/* Logo & Header */}
       <div className="flex flex-col items-center mb-10 text-center">
         <div className="w-16 h-16 bg-gradient-to-br from-primary-start to-primary-end rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-blue-500/10">
           <TrendingUp size={32} className="text-white" />
@@ -98,7 +109,14 @@ export default function AuthPage() {
                   <label className="block text-xs font-medium text-gray-400 mb-2 uppercase">Username</label>
                   <div className="relative">
                     <User className="absolute left-3.5 top-3.5 text-gray-600" size={18} />
-                    <input type="text" placeholder="Username" className="w-full bg-black border border-white/10 rounded-xl py-3.5 pl-11 text-sm outline-none" value={username} onChange={(e) => setUsername(e.target.value)} required />
+                    <input 
+                      type="text" 
+                      placeholder="Your unique name" 
+                      className="w-full bg-black border border-white/10 rounded-xl py-3.5 pl-11 text-sm outline-none focus:border-blue-500/50 transition-all" 
+                      value={username} 
+                      onChange={(e) => setUsername(e.target.value)} 
+                      required 
+                    />
                   </div>
                 </div>
               )}
@@ -127,12 +145,12 @@ export default function AuthPage() {
                   <label className="block text-xs font-medium text-gray-400 mb-2 uppercase">Referral Code</label>
                   <div className="relative">
                     <Gift className="absolute left-3.5 top-3.5 text-gray-600" size={18} />
-                    <input type="text" placeholder="Optional" className="w-full bg-black border border-white/10 rounded-xl py-3.5 pl-11 text-sm outline-none" value={referralCode} onChange={(e) => setReferralCode(e.target.value.toUpperCase())} />
+                    <input type="text" placeholder="Optional" className="w-full bg-black border border-white/10 rounded-xl py-3.5 pl-11 text-sm outline-none uppercase" value={referralCode} onChange={(e) => setReferralCode(e.target.value.toUpperCase())} />
                   </div>
                 </div>
               )}
 
-              <button type="submit" className="w-full py-4 bg-gradient-to-r from-primary-start to-primary-end rounded-xl font-semibold shadow-lg hover:brightness-110">
+              <button type="submit" className="w-full py-4 bg-gradient-to-r from-primary-start to-primary-end rounded-xl font-semibold shadow-lg hover:brightness-110 active:scale-95 transition-all">
                 {isLogin ? "Login" : "Create Account"}
               </button>
             </form>

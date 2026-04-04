@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   LayoutDashboard, TrendingUp, Wallet, Users, Trophy, UserCircle, 
-  LogOut, Menu, X, Medal, Crown, Target
+  LogOut, Menu, X, Medal, Crown
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useRouter, usePathname } from 'next/navigation';
@@ -21,7 +21,7 @@ export default function LeaderboardPage() {
     try {
       const [userRes, leadRes] = await Promise.all([
         api.get('/auth/me'),
-        api.get('/leaderboard') // Route à créer dans ton index.ts
+        api.get('/leaderboard') 
       ]);
       setUser(userRes.data);
       setRankings(leadRes.data);
@@ -68,7 +68,8 @@ export default function LeaderboardPage() {
           </div>
           <div className="flex items-center gap-3 md:gap-6">
             <div className="text-right hidden sm:block">
-              <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider leading-tight">Balance</p>
+              {/* Affichage du Username dynamique */}
+              <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider leading-tight">{user?.username || 'Trader'}</p>
               <p className="text-base font-bold text-white tracking-tight">
                 {user ? formatCurrency(user.balance) : '$0.00'}
               </p>
@@ -100,53 +101,60 @@ export default function LeaderboardPage() {
         {/* --- PODIUM (Top 3) --- */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
           {/* Rang #2 */}
-          {topThree[1] && (
+          {topThree[1] ? (
             <PodiumCard trader={topThree[1]} rank={2} color="text-gray-400" />
-          )}
+          ) : <div className="hidden md:block" />}
 
           {/* Rang #1 - CHAMPION */}
-          {topThree[0] && (
+          {topThree[0] ? (
             <div className="relative pt-10">
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 bg-yellow-500 text-black text-[10px] font-black px-4 py-1 rounded-full uppercase tracking-widest z-10">Champion</div>
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 bg-yellow-500 text-black text-[10px] font-black px-4 py-1 rounded-full uppercase tracking-widest z-10 shadow-lg shadow-yellow-500/20">Champion</div>
                 <PodiumCard trader={topThree[0]} rank={1} color="text-yellow-500" isMain />
             </div>
-          )}
+          ) : <div className="text-center py-10 text-gray-500 col-span-3">No rankings available yet.</div>}
 
           {/* Rang #3 */}
-          {topThree[2] && (
+          {topThree[2] ? (
             <PodiumCard trader={topThree[2]} rank={3} color="text-orange-600" />
-          )}
+          ) : <div className="hidden md:block" />}
         </div>
 
         {/* --- ALL RANKINGS TABLE --- */}
-        <div className="bg-[#121418] p-8 rounded-3xl border border-white/5">
-          <h3 className="text-xl font-bold text-white mb-8">All Rankings</h3>
+        <div className="bg-[#121418] p-8 rounded-3xl border border-white/5 shadow-2xl">
+          <h3 className="text-xl font-bold text-white mb-8 px-2">All Rankings</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[700px]">
               <thead>
                 <tr className="text-[10px] uppercase tracking-widest text-gray-500 border-b border-white/5">
-                  <th className="pb-4 font-bold">Rank</th>
+                  <th className="pb-4 pl-4 font-bold">Rank</th>
                   <th className="pb-4 font-bold">Trader</th>
                   <th className="pb-4 font-bold text-center">Portfolio Value</th>
-                  <th className="pb-4 font-bold text-right">Total Trades</th>
+                  <th className="pb-4 pr-4 font-bold text-right">Total Trades</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {others.map((trader: any) => (
+                {others.length > 0 ? others.map((trader: any) => (
                   <tr key={trader.rank} className="group hover:bg-white/[0.02] transition-colors">
-                    <td className="py-5 font-bold text-gray-500">#{trader.rank}</td>
+                    <td className="py-5 pl-4 font-bold text-gray-500">#{trader.rank}</td>
                     <td className="py-5">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-white/5 flex items-center justify-center font-bold text-sm uppercase text-gray-400">
-                          {trader.username.charAt(0)}
+                        {/* Avatar basé sur l'initiale du Username */}
+                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center font-bold text-sm uppercase text-gray-300 border border-white/10">
+                          {trader.username ? trader.username.charAt(0) : '?'}
                         </div>
-                        <span className="font-bold text-white text-sm">{trader.username}</span>
+                        <span className="font-bold text-white text-sm">{trader.username || 'Anonymous'}</span>
                       </div>
                     </td>
-                    <td className="py-5 text-center font-bold text-white">{formatCurrency(trader.portfolioValue)}</td>
-                    <td className="py-5 text-right text-sm text-gray-400 font-mono">{trader.totalTrades}</td>
+                    <td className="py-5 text-center font-bold text-white font-mono">{formatCurrency(trader.portfolioValue)}</td>
+                    <td className="py-5 pr-4 text-right text-sm text-gray-400 font-mono">{trader.totalTrades}</td>
                   </tr>
-                ))}
+                )) : (
+                    rankings.length <= 3 && rankings.length > 0 && (
+                        <tr>
+                            <td colSpan={4} className="py-10 text-center text-gray-600 italic">End of list.</td>
+                        </tr>
+                    )
+                )}
               </tbody>
             </table>
           </div>
@@ -160,14 +168,18 @@ export default function LeaderboardPage() {
 
 function PodiumCard({ trader, rank, color, isMain }: any) {
     return (
-        <div className={`p-8 rounded-3xl border flex flex-col items-center space-y-4 transition-all ${isMain ? 'bg-[#181A20] border-yellow-500/50 shadow-[0_0_40px_-10px_rgba(234,179,8,0.2)]' : 'bg-[#121418] border-white/5'}`}>
-            <div className={`w-16 h-16 rounded-full bg-white/5 flex items-center justify-center ${color}`}>
+        <div className={`p-8 rounded-3xl border flex flex-col items-center space-y-4 transition-all duration-300 ${isMain ? 'bg-[#181A20] border-yellow-500/50 shadow-[0_0_50px_-10px_rgba(234,179,8,0.15)] scale-105' : 'bg-[#121418] border-white/5 hover:border-white/10'}`}>
+            <div className={`w-16 h-16 rounded-full bg-white/5 flex items-center justify-center border border-white/5 ${color} shadow-inner`}>
                 {rank === 1 ? <Crown size={32} /> : <Medal size={32} />}
             </div>
-            <div className="text-center">
-                <h4 className="font-bold text-white text-lg">{trader.username}</h4>
+            <div className="text-center w-full">
+                {/* Username dynamique du podium */}
+                <h4 className="font-bold text-white text-lg truncate px-2 mb-1">{trader.username || 'Anonymous'}</h4>
                 <p className={`font-black text-xl mb-4 ${color}`}>#{rank}</p>
-                <p className="text-2xl font-bold text-white tracking-tight">{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(trader.portfolioValue)}</p>
+                <div className="h-[1px] w-12 bg-white/5 mx-auto mb-4" />
+                <p className="text-2xl font-bold text-white tracking-tight font-mono">
+                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(trader.portfolioValue)}
+                </p>
             </div>
         </div>
     );

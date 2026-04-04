@@ -1,18 +1,26 @@
 -- Extension pour générer des UUID si besoin
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- Table des Utilisateurs
+-- ==========================================
+-- Table des Utilisateurs (MISE À JOUR)
+-- ==========================================
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
+    username VARCHAR(100),              -- Ajouté pour la page Account/Dashboard
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     referral_code VARCHAR(50) UNIQUE NOT NULL,
     referred_by INTEGER REFERENCES users(id),
+    avatar_id INTEGER DEFAULT 1,        -- Ajouté pour le sélecteur d'avatars (1 à 8)
+    otp_code VARCHAR(6),                -- Ajouté pour la vérification 2FA/Email
+    is_verified BOOLEAN DEFAULT FALSE,  -- Ajouté pour bloquer les accès non vérifiés
     is_admin BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ==========================================
 -- Table des Portefeuilles (Wallets)
+-- ==========================================
 CREATE TABLE wallets (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -22,7 +30,9 @@ CREATE TABLE wallets (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ==========================================
 -- Table des Simulations de Trading
+-- ==========================================
 CREATE TABLE trades (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -38,11 +48,14 @@ CREATE TABLE trades (
     end_time TIMESTAMP
 );
 
+-- ==========================================
 -- Table des Transactions (Historique)
+-- ==========================================
 CREATE TABLE transactions (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     type VARCHAR(50), -- 'deposit', 'withdrawal', 'referral_bonus', 'trade_profit'
     amount DECIMAL(20, 8) NOT NULL,
+    status VARCHAR(20) DEFAULT 'completed', -- Ajouté pour plus de clarté
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

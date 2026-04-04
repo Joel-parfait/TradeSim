@@ -6,17 +6,17 @@ import crypto from 'crypto';
 import { AuthRequest } from '../middleware/authMiddleware.js';
 
 export const register = async (req: Request, res: Response) => {
-  const { email, password, referralCode } = req.body;
-  const client = await pool.connect(); // Utilisation d'un client pour la transaction
+  const { username, email, password, referralCode } = req.body;
+  const client = await pool.connect(); 
 
   try {
-    // 1. Vérifier si l'utilisateur existe déjà avant de commencer
+    // 1. Vérifier si l'utilisateur existe déjà
     const userExists = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
     if (userExists.rows.length > 0) {
       return res.status(400).json({ message: "Cet email est déjà utilisé." });
     }
 
-    await client.query('BEGIN'); // DÉBUT DE LA TRANSACTION
+    await client.query('BEGIN'); 
 
     // 2. Hachage du mot de passe
     const salt = await bcrypt.genSalt(10);
@@ -26,7 +26,7 @@ export const register = async (req: Request, res: Response) => {
     const myReferralCode = crypto.randomBytes(4).toString('hex').toUpperCase();
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // 4. Gérer le parrainage (Recherche insensible à la casse)
+    // 4. Gérer le parrainage
     let referredBy = null;
     if (referralCode && referralCode.trim() !== "") {
       const referrer = await client.query(
@@ -36,23 +36,21 @@ export const register = async (req: Request, res: Response) => {
       if (referrer.rows.length > 0) {
         referredBy = referrer.rows[0].id;
       } else {
-        // Optionnel : Bloquer si le code est fourni mais invalide
         await client.query('ROLLBACK');
         return res.status(400).json({ message: "Le code de parrainage est invalide." });
       }
     }
 
-    // 5. Créer l'utilisateur
+    // 5. Créer l'utilisateur avec son USERNAME
     const newUser = await client.query(
-      `INSERT INTO users (email, password_hash, referral_code, otp_code, is_verified, referred_by) 
-       VALUES ($1, $2, $3, $4, FALSE, $5) RETURNING id, email`,
-      [email.toLowerCase().trim(), hashedPassword, myReferralCode, otp, referredBy]
+      `INSERT INTO users (username, email, password_hash, referral_code, otp_code, is_verified, referred_by, avatar_id) 
+       VALUES ($1, $2, $3, $4, $5, FALSE, $6, 1) RETURNING id, email`,
+      [username, email.toLowerCase().trim(), hashedPassword, myReferralCode, otp, referredBy]
     );
 
     const userId = newUser.rows[0].id;
 
-    // 6. Créer le portefeuille (Wallet)
-    // On met 100$ de bienvenue comme dans ton code initial
+    // 6. Créer le portefeuille
     await client.query(
       'INSERT INTO wallets (user_id, balance) VALUES ($1, $2)', 
       [userId, 100.00]
@@ -61,23 +59,20 @@ export const register = async (req: Request, res: Response) => {
     // 7. Bonus Parrainage
     if (referredBy) {
       const BONUS_AMOUNT = 5.00;
-      // Mise à jour du wallet du parrain
       await client.query(
         'UPDATE wallets SET balance = balance + $1, bonus_balance = bonus_balance + $1 WHERE user_id = $2', 
         [BONUS_AMOUNT, referredBy]
       );
-      // Historique de transaction pour le parrain
       await client.query(
-        'INSERT INTO transactions (user_id, type, amount) VALUES ($1, $2, $3)', 
-        [referredBy, 'referral_bonus', BONUS_AMOUNT]
+        "INSERT INTO transactions (user_id, type, amount, status) VALUES ($1, 'referral_bonus', $2, 'completed')", 
+        [referredBy, BONUS_AMOUNT]
       );
     }
 
-    await client.query('COMMIT'); // TOUT EST OK, ON SAUVEGARDE
+    await client.query('COMMIT'); 
 
-    // SIMULATION EMAIL
     console.log("-----------------------------------------");
-    console.log(`NOUVEL INSCRIT : ${email}`);
+    console.log(`NOUVEL INSCRIT : ${username} (${email})`);
     console.log(`CODE DE VÉRIFICATION OTP : ${otp}`);
     console.log("-----------------------------------------");
 
@@ -87,7 +82,7 @@ export const register = async (req: Request, res: Response) => {
     });
 
   } catch (error: any) {
-    await client.query('ROLLBACK'); // ANNULE TOUT EN CAS D'ERREUR
+    await client.query('ROLLBACK');
     console.error("ERREUR REGISTRE:", error);
     res.status(500).json({ message: "Erreur lors de l'inscription.", detail: error.message });
   } finally {
@@ -127,7 +122,7 @@ export const login = async (req: Request, res: Response) => {
     res.json({
       message: "Connexion réussie",
       token,
-      user: { id: user.id, email: user.email, referral_code: user.referral_code }
+      user: { id: user.id, email: user.email, username: user.username, avatar_id: user.avatar_id }
     });
   } catch (error) {
     res.status(500).json({ message: "Erreur lors de la connexion." });
@@ -162,7 +157,12 @@ export const getMe = async (req: AuthRequest, res: Response) => {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ message: "Non autorisé" });
 
-    const userRes = await pool.query('SELECT id, email, referral_code FROM users WHERE id = $1', [userId]);
+    // Récupération complète des infos pour le Dashboard et Account
+    const userRes = await pool.query(
+      'SELECT id, username, email, referral_code, avatar_id FROM users WHERE id = $1', 
+      [userId]
+    );
+    
     if (userRes.rows.length === 0) return res.status(404).json({ message: "Utilisateur non trouvé" });
 
     const user = userRes.rows[0];
@@ -171,8 +171,10 @@ export const getMe = async (req: AuthRequest, res: Response) => {
 
     res.json({
       id: user.id,
+      username: user.username,
       email: user.email,
       referral_code: user.referral_code,
+      avatar_id: user.avatar_id,
       balance: parseFloat(balance)
     });
   } catch (error: any) {
