@@ -16,9 +16,9 @@ CREATE TABLE users (
 CREATE TABLE wallets (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    balance DECIMAL(18, 8) DEFAULT 0.0,
-    bonus_balance DECIMAL(18, 8) DEFAULT 0.0,
-    total_profit DECIMAL(18, 8) DEFAULT 0.0,
+    balance DECIMAL(20, 8) DEFAULT 0.0,
+    bonus_balance DECIMAL(20, 8) DEFAULT 0.0,
+    total_profit DECIMAL(20, 8) DEFAULT 0.0,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -27,12 +27,12 @@ CREATE TABLE trades (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     crypto_symbol VARCHAR(20) NOT NULL,
-    amount_invested DECIMAL(18, 8) NOT NULL,
-    target_profit DECIMAL(18, 8) NOT NULL,
+    amount_invested DECIMAL(20, 8) NOT NULL,
+    target_profit DECIMAL(20, 8) NOT NULL,
     duration_hours INTEGER DEFAULT 24,
-    start_price DECIMAL(18, 8),
-    end_price_target DECIMAL(18, 8),
-    current_simulated_price DECIMAL(18, 8),
+    start_price DECIMAL(20, 8),
+    end_price_target DECIMAL(20, 8),
+    current_simulated_price DECIMAL(20, 8),
     status VARCHAR(20) CHECK (status IN ('running', 'completed', 'cancelled')) DEFAULT 'running',
     start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     end_time TIMESTAMP
@@ -43,6 +43,6 @@ CREATE TABLE transactions (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     type VARCHAR(50), -- 'deposit', 'withdrawal', 'referral_bonus', 'trade_profit'
-    amount DECIMAL(18, 8) NOT NULL,
+    amount DECIMAL(20, 8) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

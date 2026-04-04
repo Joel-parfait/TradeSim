@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   LayoutDashboard, TrendingUp, Wallet, Users, Trophy, UserCircle, 
-  LogOut, Menu, X, Bot, Zap, AlertTriangle, CheckCircle2, Coins, ArrowUpRight, ArrowDownRight, Loader2
+  LogOut, Menu, X, Bot, Zap, Coins, ArrowUpRight, ArrowDownRight, Loader2
 } from 'lucide-react';
 import { AreaChart, Area, ResponsiveContainer, CartesianGrid, Tooltip, YAxis } from 'recharts';
 import api from '@/lib/api';
@@ -14,7 +14,6 @@ export default function TradePage() {
   const [user, setUser] = useState<any>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   
-  // États pour la logique de trade
   const [amount, setAmount] = useState<string>("");
   const [cryptoSymbol, setCryptoSymbol] = useState<string>("BTC");
   const [loading, setLoading] = useState(false);
@@ -23,6 +22,11 @@ export default function TradePage() {
 
   const router = useRouter();
   const pathname = usePathname();
+
+  const [liveProfit, setLiveProfit] = useState(0);
+  const [liveTrades, setLiveTrades] = useState<any[]>([]);
+  const [chartData, setChartData] = useState<any[]>([]);
+  const [winRate, setWinRate] = useState(98.4);
 
   const loadUser = useCallback(() => {
     api.get('/auth/me')
@@ -44,6 +48,22 @@ export default function TradePage() {
     return val * 10;
   };
 
+  const autoFinalize = useCallback(async () => {
+    try {
+      const res = await api.post('/trades/finalize');
+      toast.success("Trade terminé ! Gains ajoutés au solde.");
+      
+      setActiveTrade(null);
+      setIsFinished(false);
+      setLiveProfit(0);
+      setChartData([]);
+      setLiveTrades([]);
+      loadUser();
+    } catch (error) {
+      console.error("Erreur lors de la finalisation automatique");
+    }
+  }, [loadUser]);
+
   const checkPersistedTrade = useCallback(async () => {
     try {
       const res = await api.get('/trades/active');
@@ -51,16 +71,17 @@ export default function TradePage() {
 
       if (trade && trade.status === 'running') {
         setActiveTrade(trade);
-        
         const startTime = new Date(trade.start_time).getTime();
-        const durationMs = 24 * 60 * 60 * 1000;
+        const endTime = new Date(trade.end_time).getTime();
+        const durationMs = endTime - startTime; 
         const now = new Date().getTime();
         
-        // Calcul du statut terminé
-        const finishedStatus = now >= (startTime + durationMs);
-        setIsFinished(finishedStatus);
+        if (now >= endTime) {
+            autoFinalize();
+            return;
+        }
 
-        const elapsed = now - startTime;
+        const elapsed = Math.min(now - startTime, durationMs);
         const totalTargetProfit = Math.max(0, trade.target_profit - trade.amount_invested);
         const progressPercent = Math.min(elapsed / durationMs, 1);
         const currentProfit = totalTargetProfit * progressPercent;
@@ -75,18 +96,12 @@ export default function TradePage() {
         }
         setChartData(historyPoints);
 
-        // --- CORRECTION : GÉNÉRATION DES HEURES BASÉES SUR LE PASSÉ ---
-        // Si le trade est fini, on génère les transactions juste avant l'heure de fin.
-        // Sinon, on les génère juste avant "maintenant".
-        const referenceTime = finishedStatus ? (startTime + durationMs) : now;
-
         const initialTrades = Array.from({ length: 6 }, (_, i) => ({
-            id: referenceTime - (i * 150000),
+            id: now - (i * 150000),
             pair: `${trade.crypto_symbol}/USDT`,
             type: Math.random() > 0.15 ? 'BUY' : 'SELL',
             profit: (Math.random() * 8 + 2).toFixed(2),
-            // On utilise referenceTime pour que l'heure soit fixe à l'actualisation
-            time: new Date(referenceTime - (i * 300000)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            time: new Date(now - (i * 300000)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }));
         setLiveTrades(initialTrades);
 
@@ -99,29 +114,26 @@ export default function TradePage() {
     } catch (error) {
       console.error("Erreur sync trade");
     }
-  }, []);
+  }, [autoFinalize]);
 
   useEffect(() => {
     checkPersistedTrade();
   }, [checkPersistedTrade]);
-
-  const [liveProfit, setLiveProfit] = useState(0);
-  const [liveTrades, setLiveTrades] = useState<any[]>([]);
-  const [chartData, setChartData] = useState<any[]>([]);
-  const [winRate, setWinRate] = useState(98.4);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (activeTrade && !isFinished) { 
       interval = setInterval(() => {
         const startTime = new Date(activeTrade.start_time).getTime();
-        const durationMs = 24 * 60 * 60 * 1000;
-        const endTime = startTime + durationMs;
+        const endTime = new Date(activeTrade.end_time).getTime();
+        const durationMs = endTime - startTime; 
         const now = new Date().getTime();
         
         if (now >= endTime) {
             setIsFinished(true);
-            console.log("Trade terminé");
+            setLiveProfit(activeTrade.target_profit - activeTrade.amount_invested);
+            clearInterval(interval);
+            autoFinalize(); 
             return; 
         }
 
@@ -151,20 +163,13 @@ export default function TradePage() {
       }, 4000);
     }
     return () => clearInterval(interval);
-  }, [activeTrade, isFinished]);
+  }, [activeTrade, isFinished, autoFinalize]);
 
   const handleStartBot = async () => {
-    if (activeTrade && isFinished) {
-        return toast.error("Veuillez d'abord retirer votre gain");
-    }
-
+    if (activeTrade) return toast.error("Un trade est déjà en cours");
     const numAmount = Number(amount);
-    if (!amount || isNaN(numAmount) || numAmount < 100) {
-      return toast.error("Montant minimum accepté : $100");
-    }
-    if (user && numAmount > user.balance) {
-      return toast.error("Solde insuffisant");
-    }
+    if (!amount || isNaN(numAmount) || numAmount < 100) return toast.error("Montant minimum : $100");
+    if (user && numAmount > user.balance) return toast.error("Solde insuffisant");
 
     setLoading(true);
     try {
@@ -182,15 +187,6 @@ export default function TradePage() {
       toast.error("Erreur lors du lancement");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleWithdraw = () => {
-    if (!activeTrade) {
-      return toast.error("Veuillez d'abord démarrer un trade");
-    }
-    if (activeTrade && !isFinished) {
-      return toast.error("Veuillez patienter jusqu'à la fin du trade");
     }
   };
 
@@ -242,7 +238,7 @@ export default function TradePage() {
         )}
       </nav>
 
-      <main className="max-w-[1400px] mx-auto p-4 md:p-10 w-full space-y-8">
+      <main className="max-w-[1400px] mx-auto p-4 md:p-10 w-full space-y-8 flex-1">
         
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between p-6 md:p-8 bg-[#181A20] rounded-3xl border border-white/5 gap-6">
             <div className='flex items-center gap-4 md:gap-6 w-full lg:w-auto'>
@@ -259,30 +255,23 @@ export default function TradePage() {
             <div className="relative w-full lg:w-32">
               <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</div>
               <input type="number" placeholder="Montant" value={amount} onChange={(e) => setAmount(e.target.value)} 
-                disabled={activeTrade && !isFinished}
+                disabled={activeTrade}
                 className="w-full bg-[#0B0E11] border border-white/10 rounded-xl py-3 pl-7 pr-3 outline-none focus:border-blue-500 text-sm font-bold disabled:opacity-50" />
             </div>
             <div className="relative w-full lg:w-32">
               <div className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-500"><Coins size={16} /></div>
               <select value={cryptoSymbol} onChange={(e) => setCryptoSymbol(e.target.value)} 
-                disabled={activeTrade && !isFinished}
+                disabled={activeTrade}
                 className="w-full bg-[#0B0E11] border border-white/10 rounded-xl py-3 pl-9 pr-3 outline-none text-sm font-bold appearance-none cursor-pointer disabled:opacity-50">
                 <option value="BTC">BTC</option><option value="ETH">ETH</option><option value="BNB">BNB</option><option value="SOL">SOL</option>
               </select>
             </div>
 
             <button onClick={handleStartBot} 
-              disabled={loading || (activeTrade && !isFinished)}
+              disabled={loading || activeTrade}
               className="w-full lg:w-auto flex items-center justify-center gap-2 bg-blue-600 text-white font-bold px-8 py-4 rounded-2xl hover:bg-blue-700 transition-all active:scale-95 shadow-lg shadow-blue-600/20 disabled:opacity-50 text-sm"
             >
-              <Bot size={18} /> {(activeTrade && !isFinished) ? "Bot Active" : (loading ? "..." : "Start Trading")}
-            </button>
-
-            <button 
-              onClick={handleWithdraw}
-              className="w-full lg:w-auto flex items-center justify-center gap-2 bg-white/5 text-white font-bold px-8 py-4 rounded-2xl hover:bg-white/10 transition-all border border-white/10 text-sm"
-            >
-              Withdraw
+              {loading && !activeTrade ? <Loader2 className="animate-spin" size={18} /> : <Bot size={18} />} {(activeTrade && !isFinished) ? "Bot Active" : "Start Trading"}
             </button>
           </div>
         </div>
@@ -340,6 +329,23 @@ export default function TradePage() {
             </div>
           </div>
         </div>
+
+        {/* --- PIED DE PAGE : HOW AI TRADING WORKS --- */}
+        <footer className="mt-12 p-6 md:p-8 bg-[#181A20] rounded-3xl border border-white/5">
+          <div className="flex flex-col md:flex-row items-start gap-6">
+            <div className="p-3 bg-blue-600/10 rounded-xl shrink-0">
+              <Bot className="w-6 h-6 text-blue-500" />
+            </div>
+            <div>
+              <h4 className="text-lg font-bold text-white mb-3">How AI Trading Works</h4>
+              <p className="text-gray-400 text-sm md:text-base leading-relaxed">
+                Our advanced AI trading bot uses machine learning algorithms to analyze market trends, execute trades automatically, and maximize your profits 24/7. 
+                The bot employs sophisticated risk management strategies and adapts to market conditions in real-time. 
+                Simply start the bot and let our AI handle the trading while you track your growing profits.
+              </p>
+            </div>
+          </div>
+        </footer>
       </main>
     </div>
   );

@@ -49,7 +49,8 @@ export const startTrade = async (req: AuthRequest, res: Response) => {
 
     // CALCUL PROPORTIONNEL
     const targetProfit = calculateTarget(amount);
-    const endTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    // const endTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const endTime = new Date(Date.now() + 60 * 1000); // 1 minute EXACTEMENT
 
     // 4. Insertion avec targetProfit dynamique
     const newTrade = await pool.query(
@@ -98,5 +99,59 @@ export const getTradeHistory = async (req: AuthRequest, res: Response) => {
     res.json(trades.rows);
   } catch (error) {
     res.status(500).json({ message: "Erreur lors de la récupération de l'historique." });
+  }
+};
+
+export const finalizeTrade = async (req: AuthRequest, res: Response) => {
+  const userId = req.user?.id;
+
+  try {
+    // 1. On récupère le trade en vérifiant qu'il est bien 'running'
+    const tradeQuery = await pool.query(
+      "SELECT * FROM trades WHERE user_id = $1 AND status = 'running' LIMIT 1",
+      [userId]
+    );
+
+    if (tradeQuery.rows.length === 0) {
+      return res.status(404).json({ message: "Aucun trade actif trouvé." });
+    }
+
+    const trade = tradeQuery.rows[0];
+    const now = new Date();
+    const endTime = new Date(trade.end_time);
+
+    // --- SÉCURITÉ RÉTABLIE --- 
+    // On compare l'heure actuelle du serveur avec l'heure de fin en BD
+    // On ajoute une petite marge de 2 secondes pour les décalages réseau
+    if (now.getTime() < (endTime.getTime() - 2000)) {
+      return res.status(400).json({ 
+        message: "Sécurité : Le trade est encore en cours. Retrait impossible." 
+      });
+    }
+
+    await pool.query('BEGIN');
+
+    // On utilise UNIQUEMENT le montant stocké en base de données au début du trade
+    const finalAmount = parseFloat(trade.target_profit);
+
+    // Crédit du portefeuille
+    await pool.query(
+      "UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE user_id = $2",
+      [finalAmount, userId]
+    );
+
+    // Marquage du trade comme terminé
+    await pool.query(
+      "UPDATE trades SET status = 'completed', end_time = NOW() WHERE id = $1",
+      [trade.id]
+    );
+
+    await pool.query('COMMIT');
+    res.json({ message: "Retrait réussi !", credited_amount: finalAmount });
+
+  } catch (error) {
+    await pool.query('ROLLBACK');
+    console.error("Erreur finalize:", error);
+    res.status(500).json({ message: "Erreur serveur lors du retrait." });
   }
 };
