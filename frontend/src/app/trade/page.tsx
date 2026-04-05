@@ -4,7 +4,7 @@ import {
   LayoutDashboard, TrendingUp, Wallet, Users, Trophy, UserCircle, 
   LogOut, Menu, X, Bot, Zap, Coins, ArrowUpRight, ArrowDownRight, Loader2
 } from 'lucide-react';
-import { AreaChart, Area, ResponsiveContainer, CartesianGrid, Tooltip, YAxis } from 'recharts';
+import { AreaChart, Area, ResponsiveContainer, CartesianGrid, YAxis } from 'recharts';
 import api from '@/lib/api';
 import { toast } from 'sonner';
 import { useRouter, usePathname } from 'next/navigation';
@@ -50,9 +50,8 @@ export default function TradePage() {
 
   const autoFinalize = useCallback(async () => {
     try {
-      const res = await api.post('/trades/finalize');
+      await api.post('/trades/finalize');
       toast.success("Trade terminé ! Gains ajoutés au solde.");
-      
       setActiveTrade(null);
       setIsFinished(false);
       setLiveProfit(0);
@@ -73,7 +72,6 @@ export default function TradePage() {
         setActiveTrade(trade);
         const startTime = new Date(trade.start_time).getTime();
         const endTime = new Date(trade.end_time).getTime();
-        const durationMs = endTime - startTime; 
         const now = new Date().getTime();
         
         if (now >= endTime) {
@@ -81,19 +79,15 @@ export default function TradePage() {
             return;
         }
 
-        const elapsed = Math.min(now - startTime, durationMs);
         const totalTargetProfit = Math.max(0, trade.target_profit - trade.amount_invested);
-        const progressPercent = Math.min(elapsed / durationMs, 1);
+        const progressPercent = Math.min((now - startTime) / (endTime - startTime), 1);
         const currentProfit = totalTargetProfit * progressPercent;
         setLiveProfit(currentProfit);
 
-        const historyPoints = [];
-        for (let i = 0; i <= 20; i++) {
-            historyPoints.push({
-                time: i,
-                profit: (currentProfit / 20) * i + (Math.random() * 0.5)
-            });
-        }
+        const historyPoints = Array.from({ length: 21 }, (_, i) => ({
+            time: i,
+            profit: (currentProfit / 20) * i + (Math.random() * 0.5)
+        }));
         setChartData(historyPoints);
 
         const initialTrades = Array.from({ length: 6 }, (_, i) => ({
@@ -104,10 +98,8 @@ export default function TradePage() {
             time: new Date(now - (i * 300000)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }));
         setLiveTrades(initialTrades);
-
       } else {
         setActiveTrade(null);
-        setIsFinished(false);
         setLiveProfit(0);
         setChartData([]);
       }
@@ -126,7 +118,6 @@ export default function TradePage() {
       interval = setInterval(() => {
         const startTime = new Date(activeTrade.start_time).getTime();
         const endTime = new Date(activeTrade.end_time).getTime();
-        const durationMs = endTime - startTime; 
         const now = new Date().getTime();
         
         if (now >= endTime) {
@@ -137,20 +128,14 @@ export default function TradePage() {
             return; 
         }
 
-        const elapsed = now - startTime;
         const totalTargetProfit = Math.max(0, activeTrade.target_profit - activeTrade.amount_invested);
-        const progressPercent = Math.min(elapsed / durationMs, 1);
+        const progressPercent = Math.min((now - startTime) / (endTime - startTime), 1);
         const currentProfit = totalTargetProfit * progressPercent;
 
         setLiveProfit(currentProfit);
-
-        setChartData(prev => {
-            const newData = [...prev, { time: prev.length, profit: currentProfit + (Math.random() * 0.2) }];
-            return newData.slice(-30); 
-        });
-
-        setWinRate(prev => parseFloat((98.2 + Math.random() * 1.3).toFixed(1)));
-
+        setChartData(prev => [...prev, { time: prev.length, profit: currentProfit + (Math.random() * 0.2) }].slice(-30));
+        setWinRate(() => parseFloat((98.2 + Math.random() * 1.3).toFixed(1)));
+        
         const newTrade = {
             id: Date.now(),
             pair: `${activeTrade.crypto_symbol}/USDT`,
@@ -199,6 +184,7 @@ export default function TradePage() {
   return (
     <div className="min-h-screen bg-[#0B0E11] text-[#EAECEF] font-sans flex flex-col overflow-x-hidden">
       
+      {/* --- NAVBAR RESPONSIVE --- */}
       <nav className="bg-[#121212] border-b border-white/5 sticky top-0 z-[100] w-full">
         <div className="max-w-[1400px] mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4 lg:gap-10">
@@ -224,22 +210,34 @@ export default function TradePage() {
               <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider leading-tight">Balance</p>
               <p className="text-base font-bold text-white tracking-tight">{user ? formatCurrency(user.balance) : '$0.00'}</p>
             </div>
-            <button onClick={() => { localStorage.clear(); router.push('/'); }} className="text-gray-400 hover:text-white transition-colors"><LogOut size={20}/></button>
-            <button className="p-2 text-gray-400 lg:hidden" onClick={() => setIsMenuOpen(!isMenuOpen)}>{isMenuOpen ? <X /> : <Menu />}</button>
+            <button onClick={() => { localStorage.clear(); router.push('/'); }} className="hidden sm:block text-gray-400 hover:text-white transition-colors"><LogOut size={20}/></button>
+            <button className="p-2 text-gray-400 lg:hidden" onClick={() => setIsMenuOpen(!isMenuOpen)}>{isMenuOpen ? <X size={24} /> : <Menu size={24} />}</button>
           </div>
         </div>
 
+        {/* MOBILE MENU DROPDOWN */}
         {isMenuOpen && (
-          <div className="lg:hidden bg-[#181A20] border-b border-white/5 p-4 flex flex-col gap-2">
-            <NavLink href="/dashboard" label="Dashboard" active={pathname === '/dashboard'} fullWidth />
-            <NavLink href="/trade" label="Trade" active={pathname === '/trade'} fullWidth />
-            <NavLink href="/wallet" label="Wallet" active={pathname === '/wallet'} fullWidth />
+          <div className="lg:hidden bg-[#181A20] border-b border-white/5 p-4 flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
+             <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl mb-2 sm:hidden">
+                <span className="text-xs text-gray-400 uppercase font-bold tracking-widest">Balance</span>
+                <span className="text-lg font-bold text-white">{user ? formatCurrency(user.balance) : '$0.00'}</span>
+            </div>
+            <NavLink href="/dashboard" label="Dashboard" active={pathname === '/dashboard'} icon={<LayoutDashboard size={18}/>} fullWidth onClick={() => setIsMenuOpen(false)} />
+            <NavLink href="/trade" label="Trade" active={pathname === '/trade'} icon={<TrendingUp size={18}/>} fullWidth onClick={() => setIsMenuOpen(false)} />
+            <NavLink href="/wallet" label="Wallet" active={pathname === '/wallet'} icon={<Wallet size={18}/>} fullWidth onClick={() => setIsMenuOpen(false)} />
+            <NavLink href="/referrals" label="Referrals" active={pathname === '/referrals'} icon={<Users size={18}/>} fullWidth onClick={() => setIsMenuOpen(false)} />
+            <NavLink href="/leaderboard" label="Leaderboard" active={pathname === '/leaderboard'} icon={<Trophy size={18}/>} fullWidth onClick={() => setIsMenuOpen(false)} />
+            <NavLink href="/account" label="Account" active={pathname === '/account'} icon={<UserCircle size={18}/>} fullWidth onClick={() => setIsMenuOpen(false)} />
+            <div className="h-px bg-white/5 my-2" />
+            <button onClick={() => { localStorage.clear(); router.push('/'); }} className="flex items-center gap-3 p-4 text-red-400 font-bold hover:bg-red-500/10 rounded-xl transition-all">
+               <LogOut size={18}/> Logout
+            </button>
           </div>
         )}
       </nav>
 
+      {/* --- PAGE CONTENT --- */}
       <main className="max-w-[1400px] mx-auto p-4 md:p-10 w-full space-y-8 flex-1">
-        
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between p-6 md:p-8 bg-[#181A20] rounded-3xl border border-white/5 gap-6">
             <div className='flex items-center gap-4 md:gap-6 w-full lg:w-auto'>
                  <div className={`bg-gradient-to-br from-blue-600 to-indigo-700 p-4 md:p-6 rounded-3xl shadow-lg shadow-blue-900/20 shrink-0 ${(activeTrade && !isFinished) ? 'animate-pulse' : ''}`}>
@@ -255,20 +253,20 @@ export default function TradePage() {
             <div className="relative w-full lg:w-32">
               <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</div>
               <input type="number" placeholder="Montant" value={amount} onChange={(e) => setAmount(e.target.value)} 
-                disabled={activeTrade}
+                disabled={!!activeTrade}
                 className="w-full bg-[#0B0E11] border border-white/10 rounded-xl py-3 pl-7 pr-3 outline-none focus:border-blue-500 text-sm font-bold disabled:opacity-50" />
             </div>
             <div className="relative w-full lg:w-32">
               <div className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-500"><Coins size={16} /></div>
               <select value={cryptoSymbol} onChange={(e) => setCryptoSymbol(e.target.value)} 
-                disabled={activeTrade}
+                disabled={!!activeTrade}
                 className="w-full bg-[#0B0E11] border border-white/10 rounded-xl py-3 pl-9 pr-3 outline-none text-sm font-bold appearance-none cursor-pointer disabled:opacity-50">
                 <option value="BTC">BTC</option><option value="ETH">ETH</option><option value="BNB">BNB</option><option value="SOL">SOL</option>
               </select>
             </div>
 
             <button onClick={handleStartBot} 
-              disabled={loading || activeTrade}
+              disabled={loading || !!activeTrade}
               className="w-full lg:w-auto flex items-center justify-center gap-2 bg-blue-600 text-white font-bold px-8 py-4 rounded-2xl hover:bg-blue-700 transition-all active:scale-95 shadow-lg shadow-blue-600/20 disabled:opacity-50 text-sm"
             >
               {loading && !activeTrade ? <Loader2 className="animate-spin" size={18} /> : <Bot size={18} />} {(activeTrade && !isFinished) ? "Bot Active" : "Start Trading"}
@@ -284,6 +282,7 @@ export default function TradePage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Performance Chart */}
           <div className="bg-[#181A20] p-6 md:p-8 rounded-3xl border border-white/5 min-h-[350px] md:h-[400px] flex flex-col">
             <h3 className="text-lg font-bold mb-6 flex items-center gap-2"><TrendingUp size={18} className="text-blue-400" /> Trading Performance</h3>
             <div className="flex-1 relative bg-[#0B0E11]/50 rounded-lg overflow-hidden border border-white/5">
@@ -302,6 +301,7 @@ export default function TradePage() {
             </div>
           </div>
 
+          {/* Live Activity */}
           <div className="bg-[#181A20] p-6 md:p-8 rounded-3xl border border-white/5 min-h-[350px] md:h-[400px] flex flex-col">
             <h3 className="text-lg font-bold mb-6 flex items-center gap-2"><Zap size={18} className="text-blue-400" /> Live Trading Activity</h3>
             <div className="flex-1 space-y-3 overflow-y-auto pr-2 custom-scrollbar">
@@ -329,31 +329,16 @@ export default function TradePage() {
             </div>
           </div>
         </div>
-
-        {/* --- PIED DE PAGE : HOW AI TRADING WORKS --- */}
-        <footer className="mt-12 p-6 md:p-8 bg-[#181A20] rounded-3xl border border-white/5">
-          <div className="flex flex-col md:flex-row items-start gap-6">
-            <div className="p-3 bg-blue-600/10 rounded-xl shrink-0">
-              <Bot className="w-6 h-6 text-blue-500" />
-            </div>
-            <div>
-              <h4 className="text-lg font-bold text-white mb-3">How AI Trading Works</h4>
-              <p className="text-gray-400 text-sm md:text-base leading-relaxed">
-                Our advanced AI trading bot uses machine learning algorithms to analyze market trends, execute trades automatically, and maximize your profits 24/7. 
-                The bot employs sophisticated risk management strategies and adapts to market conditions in real-time. 
-                Simply start the bot and let our AI handle the trading while you track your growing profits.
-              </p>
-            </div>
-          </div>
-        </footer>
       </main>
     </div>
   );
 }
 
-function NavLink({ href, label, icon, active, fullWidth }: any) {
+// --- SOUS-COMPOSANTS ---
+
+function NavLink({ href, label, icon, active, fullWidth, onClick }: any) {
   return (
-    <Link href={href} className={`flex items-center gap-2.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${fullWidth ? 'w-full' : ''} ${active ? 'bg-white/10 text-white shadow-sm ring-1 ring-white/10' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}`}>
+    <Link href={href} onClick={onClick} className={`flex items-center gap-2.5 px-4 py-3 lg:py-2 rounded-xl text-sm font-medium transition-all ${fullWidth ? 'w-full' : ''} ${active ? 'bg-white/10 text-white shadow-sm ring-1 ring-white/10' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}`}>
       {icon && <span className={active ? 'text-white' : 'text-gray-500 shrink-0'}>{icon}</span>}
       <span className="truncate">{label}</span>
     </Link>

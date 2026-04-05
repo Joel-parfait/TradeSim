@@ -252,3 +252,62 @@ export const updatePassword = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: "Erreur lors de la mise à jour du mot de passe." });
   }
 };
+
+export const forgotPassword = async (req: Request, res: Response) => {
+  const { email } = req.body;
+  try {
+    // 1. Vérifier si l'utilisateur existe
+    const userRes = await pool.query('SELECT id, username FROM users WHERE email = $1', [email.toLowerCase().trim()]);
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ message: "Aucun compte associé à cet email." });
+    }
+
+    // 2. Générer un code OTP de 6 chiffres
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // 3. Sauvegarder le code en base de données (on réutilise la colonne otp_code)
+    await pool.query(
+      'UPDATE users SET otp_code = $1 WHERE email = $2',
+      [resetCode, email.toLowerCase().trim()]
+    );
+
+    // 4. Affichage dans la console (Simulation d'envoi d'email)
+    console.log("-----------------------------------------");
+    console.log(`RÉINITIALISATION MOT DE PASSE : ${userRes.rows[0].username}`);
+    console.log(`CODE DE RÉCUPÉRATION : ${resetCode}`);
+    console.log("-----------------------------------------");
+
+    res.json({ message: "Code de récupération envoyé." });
+  } catch (error) {
+    res.status(500).json({ message: "Erreur lors de la demande." });
+  }
+};
+
+export const resetPassword = async (req: Request, res: Response) => {
+  const { email, code, newPassword } = req.body;
+  try {
+    // 1. Vérifier si le code est correct
+    const userRes = await pool.query(
+      'SELECT id FROM users WHERE email = $1 AND otp_code = $2',
+      [email.toLowerCase().trim(), code]
+    );
+
+    if (userRes.rows.length === 0) {
+      return res.status(400).json({ message: "Code invalide ou expiré." });
+    }
+
+    // 2. Hasher le nouveau mot de passe
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    // 3. Mettre à jour le mot de passe et effacer le code OTP
+    await pool.query(
+      'UPDATE users SET password_hash = $1, otp_code = NULL WHERE email = $2',
+      [hashedPassword, email.toLowerCase().trim()]
+    );
+
+    res.json({ message: "Mot de passe réinitialisé avec succès !" });
+  } catch (error) {
+    res.status(500).json({ message: "Erreur lors de la réinitialisation." });
+  }
+};

@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   LayoutDashboard, TrendingUp, Wallet, Users, Trophy, UserCircle, 
   LogOut, Menu, X 
@@ -86,7 +86,7 @@ export default function DashboardPage() {
       style: 'currency',
       currency: 'USD',
       minimumFractionDigits: 2,
-    }).format(val);
+    }).format(val || 0);
   };
 
   const isPos = marketData[selectedCrypto]?.change >= 0;
@@ -95,13 +95,13 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-[#0B0E11] text-[#EAECEF] font-sans flex flex-col overflow-x-hidden">
       
-      {/* --- NAVBAR OPTIMISÉE (DESIGN IMAGE) --- */}
+      {/* --- NAVBAR RESPONSIVE --- */}
       <nav className="bg-[#121212] border-b border-white/5 sticky top-0 z-[100] w-full">
-        <div className="max-w-[1400px] mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="max-w-[1400px] mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
           
-          <div className="flex items-center gap-10">
+          <div className="flex items-center gap-4 lg:gap-10">
             {/* Logo */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               <div className="w-8 h-8 bg-gradient-to-tr from-blue-600 to-purple-500 rounded-lg flex items-center justify-center">
                 <TrendingUp size={18} className="text-white" />
               </div>
@@ -119,35 +119,50 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3 md:gap-6">
             {/* Balance */}
             <div className="text-right hidden sm:block">
               <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider leading-tight">Balance</p>
-              <p className="text-base font-bold text-white tracking-tight">{formatCurrency(user?.balance ?? 10000)}</p>
+              <p className="text-base font-bold text-white tracking-tight">{formatCurrency(user?.balance)}</p>
             </div>
 
-            {/* Logout */}
+            {/* Logout (Desktop) */}
             <button 
               onClick={() => { localStorage.clear(); router.push('/'); }}
-              className="text-gray-400 hover:text-white transition-colors"
+              className="hidden sm:block text-gray-400 hover:text-white transition-colors"
             >
               <LogOut size={20}/>
             </button>
 
-            {/* Mobile Toggle */}
+            {/* Mobile Toggle Button */}
             <button className="p-2 text-gray-400 lg:hidden" onClick={() => setIsMenuOpen(!isMenuOpen)}>
-              {isMenuOpen ? <X /> : <Menu />}
+              {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
           </div>
         </div>
 
-        {/* Mobile Menu */}
+        {/* --- MOBILE MENU DROPDOWN --- */}
         {isMenuOpen && (
-          <div className="lg:hidden bg-[#181A20] border-b border-white/5 p-4 flex flex-col gap-2">
-            <NavLink href="/dashboard" label="Dashboard" active={pathname === '/dashboard'} fullWidth />
-            <NavLink href="/trade" label="Trade" active={pathname === '/trade'} fullWidth />
-            <NavLink href="/wallet" label="Wallet" active={pathname === '/wallet'} fullWidth />
-            <button className="flex items-center gap-3 p-3 text-red-400 font-bold" onClick={() => router.push('/')}>
+          <div className="lg:hidden bg-[#181A20] border-b border-white/5 p-4 flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
+            {/* Mobile Balance Display */}
+            <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl mb-2 sm:hidden">
+                <span className="text-xs text-gray-400 uppercase font-bold tracking-widest">Balance</span>
+                <span className="text-lg font-bold text-white">{formatCurrency(user?.balance)}</span>
+            </div>
+
+            <NavLink href="/dashboard" label="Dashboard" active={pathname === '/dashboard'} icon={<LayoutDashboard size={18}/>} fullWidth onClick={() => setIsMenuOpen(false)} />
+            <NavLink href="/trade" label="Trade" active={pathname === '/trade'} icon={<TrendingUp size={18}/>} fullWidth onClick={() => setIsMenuOpen(false)} />
+            <NavLink href="/wallet" label="Wallet" active={pathname === '/wallet'} icon={<Wallet size={18}/>} fullWidth onClick={() => setIsMenuOpen(false)} />
+            <NavLink href="/referrals" label="Referrals" active={pathname === '/referrals'} icon={<Users size={18}/>} fullWidth onClick={() => setIsMenuOpen(false)} />
+            <NavLink href="/leaderboard" label="Leaderboard" active={pathname === '/leaderboard'} icon={<Trophy size={18}/>} fullWidth onClick={() => setIsMenuOpen(false)} />
+            <NavLink href="/account" label="Account" active={pathname === '/account'} icon={<UserCircle size={18}/>} fullWidth onClick={() => setIsMenuOpen(false)} />
+            
+            <div className="h-px bg-white/5 my-2" />
+            
+            <button 
+                className="flex items-center gap-3 p-4 text-red-400 font-bold hover:bg-red-500/10 rounded-xl transition-all" 
+                onClick={() => { localStorage.clear(); router.push('/'); }}
+            >
               <LogOut size={18}/> Logout
             </button>
           </div>
@@ -155,7 +170,7 @@ export default function DashboardPage() {
       </nav>
 
       <main className="max-w-[1400px] mx-auto p-6 md:p-10 w-full">
-        {/* En-tête de bienvenue */}
+        {/* Welcome Header */}
         <div className="mb-10">
           <h1 className="text-3xl md:text-4xl font-bold">
             Welcome back, <span className="text-blue-500">{userName}!</span>
@@ -166,7 +181,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Chart Section */}
           <div className="lg:col-span-2 bg-[#181A20] rounded-3xl border border-white/5 p-6">
-             <div className="flex justify-between items-center mb-6">
+             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
                 <div>
                   <h2 className="text-3xl font-bold">${marketData[selectedCrypto]?.price.toLocaleString() ?? '---'}</h2>
                   <p className={`text-sm font-bold ${isPos ? 'text-green-500' : 'text-red-500'}`}>
@@ -176,7 +191,7 @@ export default function DashboardPage() {
                 <select 
                   value={selectedCrypto}
                   onChange={(e) => setSelectedCrypto(e.target.value)}
-                  className="bg-[#0B0E11] border border-white/10 rounded-xl px-4 py-2 text-sm outline-none"
+                  className="w-full sm:w-fit bg-[#0B0E11] border border-white/10 rounded-xl px-4 py-2 text-sm outline-none"
                 >
                   {CRYPTO_LIST.map(c => <option key={c.symbol} value={c.symbol}>{c.symbol}</option>)}
                 </select>
@@ -196,7 +211,7 @@ export default function DashboardPage() {
              </div>
           </div>
 
-          {/* Market List */}
+          {/* Market Overview List */}
           <div className="bg-[#181A20] rounded-3xl border border-white/5 overflow-hidden flex flex-col">
             <div className="p-5 border-b border-white/5 font-bold">Market Overview</div>
             <div className="overflow-y-auto max-h-[400px]">
@@ -226,22 +241,23 @@ export default function DashboardPage() {
   );
 }
 
-// COMPOSANT NAVLINK AJUSTÉ
-function NavLink({ href, label, icon, active, fullWidth }: any) {
+// COMPOSANT NAVLINK RESPONSIVE
+function NavLink({ href, label, icon, active, fullWidth, onClick }: any) {
   return (
     <Link 
       href={href}
+      onClick={onClick}
       className={`
-        flex items-center gap-2.5 px-4 py-2 rounded-xl text-sm font-medium transition-all
+        flex items-center gap-3 px-4 py-3 lg:py-2 rounded-xl text-sm font-medium transition-all
         ${fullWidth ? 'w-full' : ''} 
         ${active 
-          ? 'bg-[#1E1E1E] text-white shadow-sm ring-1 ring-white/10' 
+          ? 'bg-white/10 text-white shadow-sm ring-1 ring-white/10' 
           : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
         }
       `}
     >
-      {icon && <span className={active ? 'text-white' : 'text-gray-500'}>{icon}</span>}
-      {label}
+      {icon && <span className={active ? 'text-white' : 'text-gray-500 shrink-0'}>{icon}</span>}
+      <span className="truncate">{label}</span>
     </Link>
   );
 }
