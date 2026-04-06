@@ -112,3 +112,20 @@ export const deleteUser = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: "Erreur lors de la suppression." });
   }
 };
+
+export const updateUserRole = async (req: AuthRequest, res: Response) => {
+  const { targetUserId, role } = req.body; // 'admin' ou 'user'
+  const { role: adminRole } = req.user!;
+
+  try {
+    // SÉCURITÉ CRITIQUE : Seul un Super Admin peut changer les rôles
+    if (adminRole !== 'super_admin') {
+      return res.status(403).json({ message: "Seul le Super Administrateur peut modifier les rangs." });
+    }
+
+    await pool.query('UPDATE users SET role = $1 WHERE id = $2', [role, targetUserId]);
+    res.json({ message: "Rang mis à jour avec succès." });
+  } catch (error) {
+    res.status(500).json({ message: "Erreur lors du changement de rang." });
+  }
+};

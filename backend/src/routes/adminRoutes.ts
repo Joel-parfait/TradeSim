@@ -4,24 +4,26 @@ import {
   getAllTrades, 
   updateUserBalance, 
   updateUserStatus,
+  updateUserRole, // <--- AJOUTÉ
   deleteUser
 } from '../controllers/adminController.js';
-import { authenticateToken, isAdmin } from '../middleware/authMiddleware.js';
+import { authenticateToken, isAdmin, isSuperAdmin } from '../middleware/authMiddleware.js';
 
 const router = Router();
 
-// Toutes les routes admin passent par authenticateToken ET isAdmin
+// Toutes les routes ci-dessous nécessitent d'être connecté
 router.use(authenticateToken);
-router.use(isAdmin);
 
-// Lecture
-router.get('/users', getAllUsers);
-router.get('/trades', getAllTrades);
+// --- ROUTES ACCESSIBLES AUX ADMINS ET SUPER_ADMINS ---
+// (Les contrôleurs filtrent déjà les données pour les admins standards)
+router.get('/users', isAdmin, getAllUsers);
+router.get('/trades', isAdmin, getAllTrades);
+router.put('/users/balance', isAdmin, updateUserBalance);
+router.put('/users/status', isAdmin, updateUserStatus);
+router.delete('/users/:targetUserId', isAdmin, deleteUser);
 
-// Actions de gestion (accessibles aux Admin pour leurs filleuls et Super Admin pour tous)
-router.put('/users/balance', updateUserBalance);
-router.put('/users/status', updateUserStatus);
-
-router.delete('/users/:targetUserId', authenticateToken, isAdmin, deleteUser);
+// --- ROUTES EXCLUSIVES AU SUPER_ADMIN ---
+// Seul le Super Admin peut changer le rôle (promouvoir un admin)
+router.put('/users/role', isSuperAdmin, updateUserRole);
 
 export default router;
