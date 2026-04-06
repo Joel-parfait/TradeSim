@@ -13,7 +13,7 @@ export default function AuthPage() {
   // --- ÉTATS DES CHAMPS ---
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState(''); // Nouvel état pour l'inscription
+  const [confirmPassword, setConfirmPassword] = useState(''); 
   const [username, setUsername] = useState('');
   const [referralCode, setReferralCode] = useState('');
   const [otp, setOtp] = useState(''); 
@@ -34,20 +34,35 @@ export default function AuthPage() {
     }
   }, [searchParams]);
 
-  // --- LOGIQUE LOGIN ---
+  // --- LOGIQUE LOGIN (CORRIGÉE AVEC REDIRECTION) ---
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
       const res = await api.post('/auth/login', { email, password });
+      
       if (res.data.requireVerification) {
         setStep('verify');
         return;
       }
+
+      // 1. Sauvegarder le token
       localStorage.setItem('token', res.data.token);
-      router.push('/dashboard');
+      
+      // 2. Extraire les infos utilisateur envoyées par le backend
+      const userData = res.data.user;
+
+      // 3. Logique de redirection
+      if (userData && (userData.role === 'admin' || userData.role === 'super_admin')) {
+        toast.success(`Access granted: ${userData.role}`);
+        router.push('/admin'); // Assure-toi que ton dossier est bien src/app/admin/page.tsx
+      } else {
+        toast.success("Login successful!");
+        router.push('/dashboard');
+      }
+
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Erreur de connexion");
+      toast.error(err.response?.data?.message || "Connection error");
     } finally {
       setLoading(false);
     }
@@ -56,12 +71,9 @@ export default function AuthPage() {
   // --- LOGIQUE REGISTER ---
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Validation des mots de passe identiques
     if (password !== confirmPassword) {
       return toast.error("Passwords do not match!");
     }
-
     if (!username.trim()) return toast.error("Choose a username");
     
     setLoading(true);
@@ -80,7 +92,6 @@ export default function AuthPage() {
     }
   };
 
-  // Les autres fonctions (handleForgotPassword, handleResetPassword, handleVerifyOTP) restent inchangées...
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -134,7 +145,7 @@ export default function AuthPage() {
         <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-500 rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-blue-500/10">
           <TrendingUp size={32} className="text-white" />
         </div>
-        <h1 className="text-3xl font-bold mb-2 tracking-tight">CryptoSim</h1>
+        <h1 className="text-3xl font-bold mb-2 tracking-tight text-white">CryptoSim</h1>
         <p className="text-gray-400 text-sm">Institutional Grade Security</p>
       </div>
 
@@ -153,7 +164,7 @@ export default function AuthPage() {
                   <label className="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Username</label>
                   <div className="relative">
                     <User className="absolute left-3.5 top-3.5 text-gray-600" size={18} />
-                    <input type="text" placeholder="Unique name" className="w-full bg-black border border-white/10 rounded-xl py-3.5 pl-11 text-sm outline-none focus:border-blue-500/50 transition-all" value={username} onChange={(e) => setUsername(e.target.value)} required />
+                    <input type="text" placeholder="Unique name" className="w-full bg-black border border-white/10 rounded-xl py-3.5 pl-11 text-sm outline-none focus:border-blue-500/50 transition-all text-white" value={username} onChange={(e) => setUsername(e.target.value)} required />
                   </div>
                 </div>
               )}
@@ -162,7 +173,7 @@ export default function AuthPage() {
                 <label className="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Email</label>
                 <div className="relative">
                   <Mail className="absolute left-3.5 top-3.5 text-gray-600" size={18} />
-                  <input type="email" placeholder="Enter email" className="w-full bg-black border border-white/10 rounded-xl py-3.5 pl-11 text-sm outline-none focus:border-blue-500/50 transition-all" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                  <input type="email" placeholder="Enter email" className="w-full bg-black border border-white/10 rounded-xl py-3.5 pl-11 text-sm outline-none focus:border-blue-500/50 transition-all text-white" value={email} onChange={(e) => setEmail(e.target.value)} required />
                 </div>
               </div>
 
@@ -175,14 +186,13 @@ export default function AuthPage() {
                 </div>
                 <div className="relative">
                   <Lock className="absolute left-3.5 top-3.5 text-gray-600" size={18} />
-                  <input type={showPassword ? "text" : "password"} placeholder="Password" className="w-full bg-black border border-white/10 rounded-xl py-3.5 pl-11 pr-12 text-sm outline-none focus:border-blue-500/50 transition-all" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                  <input type={showPassword ? "text" : "password"} placeholder="Password" className="w-full bg-black border border-white/10 rounded-xl py-3.5 pl-11 pr-12 text-sm outline-none focus:border-blue-500/50 transition-all text-white" value={password} onChange={(e) => setPassword(e.target.value)} required />
                   <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3.5 top-3.5 text-gray-600">
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
               </div>
 
-              {/* CHAMP DE CONFIRMATION : Affiché uniquement lors de l'inscription */}
               {!isLogin && (
                 <div className="animate-in fade-in slide-in-from-top-2 duration-300">
                   <label className="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Confirm Password</label>
@@ -191,7 +201,7 @@ export default function AuthPage() {
                     <input 
                       type={showPassword ? "text" : "password"} 
                       placeholder="Repeat password" 
-                      className="w-full bg-black border border-white/10 rounded-xl py-3.5 pl-11 text-sm outline-none focus:border-blue-500/50 transition-all" 
+                      className="w-full bg-black border border-white/10 rounded-xl py-3.5 pl-11 text-sm outline-none focus:border-blue-500/50 transition-all text-white" 
                       value={confirmPassword} 
                       onChange={(e) => setConfirmPassword(e.target.value)} 
                       required 
@@ -205,32 +215,32 @@ export default function AuthPage() {
                   <label className="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Referral Code</label>
                   <div className="relative">
                     <Gift className="absolute left-3.5 top-3.5 text-gray-600" size={18} />
-                    <input type="text" placeholder="Optional" className="w-full bg-black border border-white/10 rounded-xl py-3.5 pl-11 text-sm outline-none uppercase tracking-widest" value={referralCode} onChange={(e) => setReferralCode(e.target.value.toUpperCase())} />
+                    <input type="text" placeholder="Optional" className="w-full bg-black border border-white/10 rounded-xl py-3.5 pl-11 text-sm outline-none uppercase tracking-widest text-white" value={referralCode} onChange={(e) => setReferralCode(e.target.value.toUpperCase())} />
                   </div>
                 </div>
               )}
 
-              <button type="submit" disabled={loading} className="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl font-bold shadow-lg hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-50">
+              <button type="submit" disabled={loading} className="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl font-bold shadow-lg hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-50 text-white">
                 {loading ? 'Processing...' : (isLogin ? "Login" : "Create Account")}
               </button>
             </form>
           </>
         )}
 
-        {/* --- Les étapes FORGOT, RESET et VERIFY restent les mêmes --- */}
+        {/* --- AUTRES ÉTAPES --- */}
         {step === 'forgot' && (
           <div className="animate-in fade-in slide-in-from-right-4 duration-300">
             <button onClick={() => setStep('auth')} className="flex items-center gap-2 text-gray-500 hover:text-white mb-6 transition-colors">
-              <ArrowLeft size={16} /> <span className="text-xs font-bold uppercase tracking-widest">Back</span>
+              <ArrowLeft size={16} /> <span className="text-xs font-bold uppercase tracking-widest text-white">Back</span>
             </button>
-            <h2 className="text-2xl font-bold mb-2">Reset Password</h2>
+            <h2 className="text-2xl font-bold mb-2 text-white">Reset Password</h2>
             <p className="text-gray-400 text-sm mb-8">Enter your email and we'll send you a recovery code.</p>
             <form onSubmit={handleForgotPassword} className="space-y-5">
               <div className="relative">
                 <Mail className="absolute left-3.5 top-3.5 text-gray-600" size={18} />
-                <input type="email" placeholder="Enter email" className="w-full bg-black border border-white/10 rounded-xl py-3.5 pl-11 text-sm outline-none focus:border-blue-500/50 transition-all" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                <input type="email" placeholder="Enter email" className="w-full bg-black border border-white/10 rounded-xl py-3.5 pl-11 text-sm outline-none focus:border-blue-500/50 transition-all text-white" value={email} onChange={(e) => setEmail(e.target.value)} required />
               </div>
-              <button type="submit" disabled={loading} className="w-full py-4 bg-blue-600 rounded-xl font-bold shadow-lg hover:bg-blue-500 transition-all disabled:opacity-50">
+              <button type="submit" disabled={loading} className="w-full py-4 bg-blue-600 rounded-xl font-bold shadow-lg hover:bg-blue-500 transition-all disabled:opacity-50 text-white">
                 {loading ? 'Sending...' : 'Send Recovery Code'}
               </button>
             </form>
@@ -239,7 +249,7 @@ export default function AuthPage() {
 
         {step === 'reset' && (
           <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-            <h2 className="text-2xl font-bold mb-2">Create New Password</h2>
+            <h2 className="text-2xl font-bold mb-2 text-white">Create New Password</h2>
             <p className="text-gray-400 text-sm mb-8">Enter the code sent to your email and choose a new password.</p>
             <form onSubmit={handleResetPassword} className="space-y-5">
               <div className="space-y-2">
@@ -250,10 +260,10 @@ export default function AuthPage() {
                 <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">New Password</label>
                 <div className="relative">
                   <Lock className="absolute left-3.5 top-3.5 text-gray-600" size={18} />
-                  <input type="password" placeholder="Min. 8 characters" className="w-full bg-black border border-white/10 rounded-xl py-3.5 pl-11 text-sm outline-none focus:border-blue-500/50 transition-all" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
+                  <input type="password" placeholder="Min. 8 characters" className="w-full bg-black border border-white/10 rounded-xl py-3.5 pl-11 text-sm outline-none focus:border-blue-500/50 transition-all text-white" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
                 </div>
               </div>
-              <button type="submit" disabled={loading} className="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl font-bold shadow-lg hover:brightness-110 transition-all disabled:opacity-50">
+              <button type="submit" disabled={loading} className="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl font-bold shadow-lg hover:brightness-110 transition-all disabled:opacity-50 text-white">
                 {loading ? 'Updating...' : 'Reset Password'}
               </button>
             </form>
@@ -263,11 +273,11 @@ export default function AuthPage() {
         {step === 'verify' && (
           <div className="text-center py-4 animate-in zoom-in-95 duration-300">
             <CheckCircle className="mx-auto mb-4 text-blue-500" size={48} />
-            <h2 className="text-2xl font-bold mb-2">Verify your account</h2>
+            <h2 className="text-2xl font-bold mb-2 text-white">Verify your account</h2>
             <p className="text-gray-400 text-sm mb-8">We sent a 6-digit code to <br/><span className="text-white font-medium">{email}</span></p>
             <form onSubmit={handleVerifyOTP} className="space-y-6">
               <input type="text" maxLength={6} placeholder="000000" className="w-full bg-black border border-white/10 rounded-xl py-4 text-center text-3xl tracking-[0.5em] font-bold text-blue-500 outline-none" value={otp} onChange={(e) => setOtp(e.target.value)} required />
-              <button type="submit" disabled={loading} className="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl font-bold shadow-lg disabled:opacity-50">
+              <button type="submit" disabled={loading} className="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl font-bold shadow-lg disabled:opacity-50 text-white">
                 {loading ? 'Verifying...' : 'Verify Account'}
               </button>
             </form>

@@ -1,1 +1,4 @@
 psql -h localhost -U tradesim_admin -d tradesim_db
+
+Créer ton premier Super Admin manuellement en base de données (il ya 3 rôles, "user", "admin", "super_admin"):
+UPDATE users SET role = 'super_admin' WHERE email = 'ton@email.com';

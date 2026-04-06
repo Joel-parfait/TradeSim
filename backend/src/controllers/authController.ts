@@ -10,7 +10,6 @@ export const register = async (req: Request, res: Response) => {
   const client = await pool.connect(); 
 
   try {
-    // 1. Vérifier si l'utilisateur existe déjà
     const userExists = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
     if (userExists.rows.length > 0) {
       return res.status(400).json({ message: "Cet email est déjà utilisé." });
@@ -18,15 +17,12 @@ export const register = async (req: Request, res: Response) => {
 
     await client.query('BEGIN'); 
 
-    // 2. Hachage du mot de passe
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // 3. Générer code parrainage et OTP
     const myReferralCode = crypto.randomBytes(4).toString('hex').toUpperCase();
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // 4. Gérer le parrainage
     let referredBy = null;
     if (referralCode && referralCode.trim() !== "") {
       const referrer = await client.query(
@@ -41,22 +37,20 @@ export const register = async (req: Request, res: Response) => {
       }
     }
 
-    // 5. Créer l'utilisateur avec son USERNAME
+    // AJOUT : Le rôle par défaut est 'user'
     const newUser = await client.query(
-      `INSERT INTO users (username, email, password_hash, referral_code, otp_code, is_verified, referred_by, avatar_id) 
-       VALUES ($1, $2, $3, $4, $5, FALSE, $6, 1) RETURNING id, email`,
+      `INSERT INTO users (username, email, password_hash, referral_code, otp_code, is_verified, referred_by, avatar_id, role) 
+       VALUES ($1, $2, $3, $4, $5, FALSE, $6, 1, 'user') RETURNING id, email`,
       [username, email.toLowerCase().trim(), hashedPassword, myReferralCode, otp, referredBy]
     );
 
     const userId = newUser.rows[0].id;
 
-    // 6. Créer le portefeuille
     await client.query(
       'INSERT INTO wallets (user_id, balance) VALUES ($1, $2)', 
       [userId, 100.00]
     );
 
-    // 7. Bonus Parrainage
     if (referredBy) {
       const BONUS_AMOUNT = 5.00;
       await client.query(
@@ -76,14 +70,10 @@ export const register = async (req: Request, res: Response) => {
     console.log(`CODE DE VÉRIFICATION OTP : ${otp}`);
     console.log("-----------------------------------------");
 
-    res.status(201).json({
-      message: "Compte créé. Veuillez vérifier votre email.",
-      email: email
-    });
+    res.status(201).json({ message: "Compte créé. Veuillez vérifier votre email.", email: email });
 
   } catch (error: any) {
     await client.query('ROLLBACK');
-    console.error("ERREUR REGISTRE:", error);
     res.status(500).json({ message: "Erreur lors de l'inscription.", detail: error.message });
   } finally {
     client.release();
@@ -113,22 +103,36 @@ export const login = async (req: Request, res: Response) => {
       return res.status(401).json({ message: "Identifiants invalides." });
     }
 
+    // --- MISE À JOUR DU TOKEN AVEC LE ROLE ---
     const token = jwt.sign(
-      { id: user.id, email: user.email, isAdmin: user.is_admin },
+      { 
+        id: user.id, 
+        email: user.email, 
+        role: user.role, // On utilise la colonne 'role'
+        isAdmin: user.role === 'admin' || user.role === 'super_admin' 
+      },
       process.env.JWT_SECRET as string,
       { expiresIn: '24h' }
     );
 
+    // --- MISE À JOUR DE LA RÉPONSE JSON (Indispensable pour le front) ---
     res.json({
       message: "Connexion réussie",
       token,
-      user: { id: user.id, email: user.email, username: user.username, avatar_id: user.avatar_id }
+      user: { 
+        id: user.id, 
+        email: user.email, 
+        username: user.username, 
+        avatar_id: user.avatar_id,
+        role: user.role // On envoie le rôle au Front-end ici
+      }
     });
   } catch (error) {
     res.status(500).json({ message: "Erreur lors de la connexion." });
   }
 };
 
+// ... verifyOTP reste inchangé ...
 export const verifyOTP = async (req: Request, res: Response) => {
   const { email, code } = req.body;
   try {
@@ -152,14 +156,14 @@ export const verifyOTP = async (req: Request, res: Response) => {
   }
 };
 
+// --- MISE À JOUR DE GETME ---
 export const getMe = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ message: "Non autorisé" });
 
-    // Récupération complète des infos pour le Dashboard et Account
     const userRes = await pool.query(
-      'SELECT id, username, email, referral_code, avatar_id FROM users WHERE id = $1', 
+      'SELECT id, username, email, referral_code, avatar_id, role FROM users WHERE id = $1', 
       [userId]
     );
     
@@ -175,6 +179,7 @@ export const getMe = async (req: AuthRequest, res: Response) => {
       email: user.email,
       referral_code: user.referral_code,
       avatar_id: user.avatar_id,
+      role: user.role, // On ajoute le rôle ici aussi
       balance: parseFloat(balance)
     });
   } catch (error: any) {
@@ -182,42 +187,23 @@ export const getMe = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// ... updateProfile, updatePassword, forgotPassword, resetPassword restent inchangés ...
+// (Mais assure-toi qu'ils sont bien présents à la fin du fichier)
 export const updateProfile = async (req: AuthRequest, res: Response) => {
   const { username, avatar_id } = req.body;
   const userId = req.user?.id;
-
-  if (!userId) {
-    return res.status(401).json({ message: "Utilisateur non identifié" });
-  }
-
+  if (!userId) return res.status(401).json({ message: "Utilisateur non identifié" });
   try {
-    // 1. Vérifier si le username est déjà pris par un autre utilisateur
     if (username) {
-      const checkUser = await pool.query(
-        'SELECT id FROM users WHERE username = $1 AND id != $2',
-        [username, userId]
-      );
-      if (checkUser.rows.length > 0) {
-        return res.status(400).json({ message: "Ce nom d'utilisateur est déjà utilisé" });
-      }
+      const checkUser = await pool.query('SELECT id FROM users WHERE username = $1 AND id != $2', [username, userId]);
+      if (checkUser.rows.length > 0) return res.status(400).json({ message: "Ce nom d'utilisateur est déjà utilisé" });
     }
-
-    // 2. Mise à jour du profil
     const updatedUser = await pool.query(
-      `UPDATE users 
-       SET username = COALESCE($1, username), 
-           avatar_id = COALESCE($2, avatar_id) 
-       WHERE id = $3 
-       RETURNING id, username, email, avatar_id`,
+      `UPDATE users SET username = COALESCE($1, username), avatar_id = COALESCE($2, avatar_id) WHERE id = $3 RETURNING id, username, email, avatar_id, role`,
       [username, avatar_id, userId]
     );
-
-    res.json({
-      message: "Profil mis à jour avec succès",
-      user: updatedUser.rows[0]
-    });
+    res.json({ message: "Profil mis à jour avec succès", user: updatedUser.rows[0] });
   } catch (error) {
-    console.error("Erreur update-profile:", error);
     res.status(500).json({ message: "Erreur lors de la mise à jour du profil" });
   }
 };
@@ -225,30 +211,17 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
 export const updatePassword = async (req: AuthRequest, res: Response) => {
   const { currentPassword, newPassword } = req.body;
   const userId = req.user?.id;
-
   if (!userId) return res.status(401).json({ message: "Non autorisé" });
-
   try {
-    // 1. Récupérer le mot de passe actuel en base de données
     const userResult = await pool.query('SELECT password_hash FROM users WHERE id = $1', [userId]);
     const user = userResult.rows[0];
-
-    // 2. Vérifier si le mot de passe actuel correspond
     const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
-    if (!isMatch) {
-      return res.status(400).json({ message: "Le mot de passe actuel est incorrect." });
-    }
-
-    // 3. Hasher le nouveau mot de passe
+    if (!isMatch) return res.status(400).json({ message: "Le mot de passe actuel est incorrect." });
     const salt = await bcrypt.genSalt(10);
     const newHashedPassword = await bcrypt.hash(newPassword, salt);
-
-    // 4. Mettre à jour en base de données
     await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHashedPassword, userId]);
-
     res.json({ message: "Mot de passe mis à jour avec succès !" });
   } catch (error) {
-    console.error("Erreur updatePassword:", error);
     res.status(500).json({ message: "Erreur lors de la mise à jour du mot de passe." });
   }
 };
@@ -256,27 +229,11 @@ export const updatePassword = async (req: AuthRequest, res: Response) => {
 export const forgotPassword = async (req: Request, res: Response) => {
   const { email } = req.body;
   try {
-    // 1. Vérifier si l'utilisateur existe
     const userRes = await pool.query('SELECT id, username FROM users WHERE email = $1', [email.toLowerCase().trim()]);
-    if (userRes.rows.length === 0) {
-      return res.status(404).json({ message: "Aucun compte associé à cet email." });
-    }
-
-    // 2. Générer un code OTP de 6 chiffres
+    if (userRes.rows.length === 0) return res.status(404).json({ message: "Aucun compte associé à cet email." });
     const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
-
-    // 3. Sauvegarder le code en base de données (on réutilise la colonne otp_code)
-    await pool.query(
-      'UPDATE users SET otp_code = $1 WHERE email = $2',
-      [resetCode, email.toLowerCase().trim()]
-    );
-
-    // 4. Affichage dans la console (Simulation d'envoi d'email)
-    console.log("-----------------------------------------");
-    console.log(`RÉINITIALISATION MOT DE PASSE : ${userRes.rows[0].username}`);
+    await pool.query('UPDATE users SET otp_code = $1 WHERE email = $2', [resetCode, email.toLowerCase().trim()]);
     console.log(`CODE DE RÉCUPÉRATION : ${resetCode}`);
-    console.log("-----------------------------------------");
-
     res.json({ message: "Code de récupération envoyé." });
   } catch (error) {
     res.status(500).json({ message: "Erreur lors de la demande." });
@@ -286,26 +243,11 @@ export const forgotPassword = async (req: Request, res: Response) => {
 export const resetPassword = async (req: Request, res: Response) => {
   const { email, code, newPassword } = req.body;
   try {
-    // 1. Vérifier si le code est correct
-    const userRes = await pool.query(
-      'SELECT id FROM users WHERE email = $1 AND otp_code = $2',
-      [email.toLowerCase().trim(), code]
-    );
-
-    if (userRes.rows.length === 0) {
-      return res.status(400).json({ message: "Code invalide ou expiré." });
-    }
-
-    // 2. Hasher le nouveau mot de passe
+    const userRes = await pool.query('SELECT id FROM users WHERE email = $1 AND otp_code = $2', [email.toLowerCase().trim(), code]);
+    if (userRes.rows.length === 0) return res.status(400).json({ message: "Code invalide ou expiré." });
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(newPassword, salt);
-
-    // 3. Mettre à jour le mot de passe et effacer le code OTP
-    await pool.query(
-      'UPDATE users SET password_hash = $1, otp_code = NULL WHERE email = $2',
-      [hashedPassword, email.toLowerCase().trim()]
-    );
-
+    await pool.query('UPDATE users SET password_hash = $1, otp_code = NULL WHERE email = $2', [hashedPassword, email.toLowerCase().trim()]);
     res.json({ message: "Mot de passe réinitialisé avec succès !" });
   } catch (error) {
     res.status(500).json({ message: "Erreur lors de la réinitialisation." });

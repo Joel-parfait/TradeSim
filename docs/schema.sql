@@ -4,19 +4,31 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- ==========================================
 -- Table des Utilisateurs (MISE À JOUR)
 -- ==========================================
+-- ==========================================
+-- Table des Utilisateurs (OPTIMISÉE ADMIN)
+-- ==========================================
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
-    username VARCHAR(100),              -- Ajouté pour la page Account/Dashboard
+    username VARCHAR(100),
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     referral_code VARCHAR(50) UNIQUE NOT NULL,
-    referred_by INTEGER REFERENCES users(id),
-    avatar_id INTEGER DEFAULT 1,        -- Ajouté pour le sélecteur d'avatars (1 à 8)
-    otp_code VARCHAR(6),                -- Ajouté pour la vérification 2FA/Email
-    is_verified BOOLEAN DEFAULT FALSE,  -- Ajouté pour bloquer les accès non vérifiés
-    is_admin BOOLEAN DEFAULT FALSE,
+    referred_by INTEGER REFERENCES users(id), -- Lien de parrainage
+    avatar_id INTEGER DEFAULT 1,
+    otp_code VARCHAR(6),
+    is_verified BOOLEAN DEFAULT FALSE,
+    
+    -- --- AJOUTS ADMIN ---
+    role VARCHAR(20) CHECK (role IN ('user', 'admin', 'super_admin')) DEFAULT 'user',
+    status VARCHAR(20) CHECK (status IN ('active', 'suspended', 'banned')) DEFAULT 'active',
+    last_login TIMESTAMP,
+    -- --------------------
+
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Note : J'ai gardé tes autres tables (wallets, trades, transactions) 
+-- car elles sont déjà bien structurées.
 
 -- ==========================================
 -- Table des Portefeuilles (Wallets)
