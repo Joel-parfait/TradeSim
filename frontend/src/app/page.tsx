@@ -34,7 +34,7 @@ export default function AuthPage() {
     }
   }, [searchParams]);
 
-  // --- LOGIQUE LOGIN (CORRIGÉE AVEC REDIRECTION) ---
+  // --- LOGIQUE LOGIN ---
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -42,22 +42,19 @@ export default function AuthPage() {
       const res = await api.post('/auth/login', { email, password });
       
       if (res.data.requireVerification) {
+        toast.info("Please verify your email to continue.");
         setStep('verify');
         return;
       }
 
-      // 1. Sauvegarder le token
       localStorage.setItem('token', res.data.token);
-      
-      // 2. Extraire les infos utilisateur envoyées par le backend
       const userData = res.data.user;
 
-      // 3. Logique de redirection
       if (userData && (userData.role === 'admin' || userData.role === 'super_admin')) {
-        toast.success(`Access granted: ${userData.role}`);
-        router.push('/admin'); // Assure-toi que ton dossier est bien src/app/admin/page.tsx
+        toast.success(`Welcome Admin ${userData.username}`);
+        router.push('/admin');
       } else {
-        toast.success("Login successful!");
+        toast.success(`Welcome back ${userData.username}`);
         router.push('/dashboard');
       }
 
@@ -84,6 +81,8 @@ export default function AuthPage() {
         password, 
         referralCode 
       });
+      
+      toast.success("Security code sent to your email!");
       setStep('verify'); 
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Registration error");
@@ -92,12 +91,13 @@ export default function AuthPage() {
     }
   };
 
+  // --- FORGOT PASSWORD ---
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
       await api.post('/auth/forgot-password', { email: email.toLowerCase().trim() });
-      toast.success("Reset code sent to your email!");
+      toast.success("A reset code has been sent to your inbox.");
       setStep('reset');
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Error sending code");
@@ -106,8 +106,14 @@ export default function AuthPage() {
     }
   };
 
+  // --- RESET PASSWORD (CORRIGÉ) ---
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (newPassword !== confirmPassword) {
+      return toast.error("New passwords do not match!");
+    }
+
     setLoading(true);
     try {
       await api.post('/auth/reset-password', { email, code: otp, newPassword });
@@ -115,6 +121,8 @@ export default function AuthPage() {
       setStep('auth');
       setIsLogin(true);
       setPassword('');
+      setConfirmPassword('');
+      setNewPassword('');
       setOtp('');
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Invalid code or error");
@@ -123,16 +131,17 @@ export default function AuthPage() {
     }
   };
 
+  // --- VERIFY OTP ---
   const handleVerifyOTP = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
       await api.post('/auth/verify-otp', { email, code: otp });
-      toast.success("Email verified! Log in now.");
+      toast.success("Email verified successfully!");
       setStep('auth');
       setIsLogin(true);
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Invalid code");
+      toast.error(err.response?.data?.message || "Incorrect verification code");
     } finally {
       setLoading(false);
     }
@@ -145,11 +154,11 @@ export default function AuthPage() {
         <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-500 rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-blue-500/10">
           <TrendingUp size={32} className="text-white" />
         </div>
-        <h1 className="text-3xl font-bold mb-2 tracking-tight text-white">CryptoSim</h1>
-        <p className="text-gray-400 text-sm">Institutional Grade Security</p>
+        <h1 className="text-3xl font-bold mb-2 tracking-tight">CryptoSim</h1>
+        <p className="text-gray-400 text-sm italic">Institutional Grade Security</p>
       </div>
 
-      <div className="w-full max-w-md bg-[#121418] p-6 md:p-8 rounded-2xl border border-white/5 shadow-xl transition-all">
+      <div className="w-full max-w-md bg-[#121418] p-6 md:p-8 rounded-2xl border border-white/5 shadow-2xl transition-all">
         
         {step === 'auth' && (
           <>
@@ -195,7 +204,7 @@ export default function AuthPage() {
 
               {!isLogin && (
                 <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                  <label className="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Confirm Password</label>
+                  <label className="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest text-blue-400">Confirm Password</label>
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-3.5 text-gray-600" size={18} />
                     <input 
@@ -210,31 +219,21 @@ export default function AuthPage() {
                 </div>
               )}
 
-              {!isLogin && (
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Referral Code</label>
-                  <div className="relative">
-                    <Gift className="absolute left-3.5 top-3.5 text-gray-600" size={18} />
-                    <input type="text" placeholder="Optional" className="w-full bg-black border border-white/10 rounded-xl py-3.5 pl-11 text-sm outline-none uppercase tracking-widest text-white" value={referralCode} onChange={(e) => setReferralCode(e.target.value.toUpperCase())} />
-                  </div>
-                </div>
-              )}
-
               <button type="submit" disabled={loading} className="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl font-bold shadow-lg hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-50 text-white">
-                {loading ? 'Processing...' : (isLogin ? "Login" : "Create Account")}
+                {loading ? <RefreshCw className="animate-spin mx-auto" /> : (isLogin ? "Login" : "Get Started")}
               </button>
             </form>
           </>
         )}
 
-        {/* --- AUTRES ÉTAPES --- */}
+        {/* --- STEP: FORGOT PASSWORD --- */}
         {step === 'forgot' && (
           <div className="animate-in fade-in slide-in-from-right-4 duration-300">
             <button onClick={() => setStep('auth')} className="flex items-center gap-2 text-gray-500 hover:text-white mb-6 transition-colors">
-              <ArrowLeft size={16} /> <span className="text-xs font-bold uppercase tracking-widest text-white">Back</span>
+              <ArrowLeft size={16} /> <span className="text-xs font-bold uppercase tracking-widest">Back</span>
             </button>
-            <h2 className="text-2xl font-bold mb-2 text-white">Reset Password</h2>
-            <p className="text-gray-400 text-sm mb-8">Enter your email and we'll send you a recovery code.</p>
+            <h2 className="text-2xl font-bold mb-2">Reset Password</h2>
+            <p className="text-gray-400 text-sm mb-8">Enter your account email to receive a recovery code.</p>
             <form onSubmit={handleForgotPassword} className="space-y-5">
               <div className="relative">
                 <Mail className="absolute left-3.5 top-3.5 text-gray-600" size={18} />
@@ -247,38 +246,69 @@ export default function AuthPage() {
           </div>
         )}
 
+        {/* --- STEP: RESET PASSWORD (AVEC CONFIRMATION ET VISIBILITÉ) --- */}
         {step === 'reset' && (
           <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-            <h2 className="text-2xl font-bold mb-2 text-white">Create New Password</h2>
-            <p className="text-gray-400 text-sm mb-8">Enter the code sent to your email and choose a new password.</p>
+            <h2 className="text-2xl font-bold mb-2 text-blue-500">Security Check</h2>
+            <p className="text-gray-400 text-sm mb-8">Enter the code sent to your email and set your new password.</p>
             <form onSubmit={handleResetPassword} className="space-y-5">
               <div className="space-y-2">
                 <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Verification Code</label>
                 <input type="text" maxLength={6} placeholder="000000" className="w-full bg-black border border-white/10 rounded-xl py-3.5 text-center text-2xl tracking-[0.5em] font-bold text-blue-500 outline-none" value={otp} onChange={(e) => setOtp(e.target.value)} required />
               </div>
+              
               <div className="space-y-2">
                 <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">New Password</label>
                 <div className="relative">
                   <Lock className="absolute left-3.5 top-3.5 text-gray-600" size={18} />
-                  <input type="password" placeholder="Min. 8 characters" className="w-full bg-black border border-white/10 rounded-xl py-3.5 pl-11 text-sm outline-none focus:border-blue-500/50 transition-all text-white" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
+                  <input 
+                    type={showPassword ? "text" : "password"} 
+                    placeholder="Min. 8 characters" 
+                    className="w-full bg-black border border-white/10 rounded-xl py-3.5 pl-11 pr-12 text-sm outline-none focus:border-blue-500/50 transition-all text-white" 
+                    value={newPassword} 
+                    onChange={(e) => setNewPassword(e.target.value)} 
+                    required 
+                  />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3.5 top-3.5 text-gray-600">
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
                 </div>
               </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest text-blue-400">Confirm New Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-3.5 text-gray-600" size={18} />
+                  <input 
+                    type={showPassword ? "text" : "password"} 
+                    placeholder="Repeat new password" 
+                    className="w-full bg-black border border-white/10 rounded-xl py-3.5 pl-11 text-sm outline-none focus:border-blue-500/50 transition-all text-white" 
+                    value={confirmPassword} 
+                    onChange={(e) => setConfirmPassword(e.target.value)} 
+                    required 
+                  />
+                </div>
+              </div>
+
               <button type="submit" disabled={loading} className="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl font-bold shadow-lg hover:brightness-110 transition-all disabled:opacity-50 text-white">
-                {loading ? 'Updating...' : 'Reset Password'}
+                {loading ? <RefreshCw className="animate-spin mx-auto" /> : 'Update Password'}
               </button>
             </form>
           </div>
         )}
 
+        {/* --- STEP: VERIFY --- */}
         {step === 'verify' && (
           <div className="text-center py-4 animate-in zoom-in-95 duration-300">
-            <CheckCircle className="mx-auto mb-4 text-blue-500" size={48} />
-            <h2 className="text-2xl font-bold mb-2 text-white">Verify your account</h2>
-            <p className="text-gray-400 text-sm mb-8">We sent a 6-digit code to <br/><span className="text-white font-medium">{email}</span></p>
+            <div className="mx-auto mb-4 w-20 h-20 bg-blue-500/10 rounded-full flex items-center justify-center">
+                <Mail className="text-blue-500" size={40} />
+            </div>
+            <h2 className="text-2xl font-bold mb-2">Check your inbox</h2>
+            <p className="text-gray-400 text-sm mb-8">We've sent a 6-digit verification code to <br/><span className="text-white font-medium">{email}</span></p>
             <form onSubmit={handleVerifyOTP} className="space-y-6">
               <input type="text" maxLength={6} placeholder="000000" className="w-full bg-black border border-white/10 rounded-xl py-4 text-center text-3xl tracking-[0.5em] font-bold text-blue-500 outline-none" value={otp} onChange={(e) => setOtp(e.target.value)} required />
               <button type="submit" disabled={loading} className="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl font-bold shadow-lg disabled:opacity-50 text-white">
-                {loading ? 'Verifying...' : 'Verify Account'}
+                {loading ? <RefreshCw className="animate-spin mx-auto" /> : 'Verify Email'}
               </button>
             </form>
             <button onClick={() => setStep('auth')} className="mt-6 text-[10px] font-bold text-gray-500 hover:text-white uppercase tracking-widest transition-colors flex items-center justify-center gap-2 mx-auto">

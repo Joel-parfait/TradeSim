@@ -49,7 +49,7 @@ export const startTrade = async (req: AuthRequest, res: Response) => {
 
     const targetProfit = calculateTarget(amount);
     // Modifier ici pour 24h ou 1min selon tes besoins de test
-    const endTime = new Date(Date.now() + 60 * 1000); 
+    const endTime = new Date(Date.now() + 5 * 60 * 1000); 
 
     const newTrade = await pool.query(
       `INSERT INTO trades 

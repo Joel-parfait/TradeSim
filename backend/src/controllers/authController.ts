@@ -4,12 +4,17 @@ import jwt from 'jsonwebtoken';
 import pool from '../config/db.js';
 import crypto from 'crypto';
 import { AuthRequest } from '../middleware/authMiddleware.js';
+import { sendVerificationEmail } from '../utils/emailService.js'; // Assurez-vous que le chemin est correct
 
+// ==========================================
+// INSCRIPTION (REGISTER)
+// ==========================================
 export const register = async (req: Request, res: Response) => {
   const { username, email, password, referralCode } = req.body;
   const client = await pool.connect(); 
 
   try {
+    // 1. Vérifier si l'utilisateur existe déjà
     const userExists = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
     if (userExists.rows.length > 0) {
       return res.status(400).json({ message: "Cet email est déjà utilisé." });
@@ -17,12 +22,15 @@ export const register = async (req: Request, res: Response) => {
 
     await client.query('BEGIN'); 
 
+    // 2. Hachage du mot de passe
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
+    // 3. Générer code parrainage et OTP
     const myReferralCode = crypto.randomBytes(4).toString('hex').toUpperCase();
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
+    // 4. Gérer le parrainage
     let referredBy = null;
     if (referralCode && referralCode.trim() !== "") {
       const referrer = await client.query(
@@ -37,7 +45,7 @@ export const register = async (req: Request, res: Response) => {
       }
     }
 
-    // AJOUT : Le rôle par défaut est 'user'
+    // 5. Créer l'utilisateur (Rôle par défaut: user)
     const newUser = await client.query(
       `INSERT INTO users (username, email, password_hash, referral_code, otp_code, is_verified, referred_by, avatar_id, role) 
        VALUES ($1, $2, $3, $4, $5, FALSE, $6, 1, 'user') RETURNING id, email`,
@@ -46,11 +54,13 @@ export const register = async (req: Request, res: Response) => {
 
     const userId = newUser.rows[0].id;
 
+    // 6. Créer le portefeuille
     await client.query(
       'INSERT INTO wallets (user_id, balance) VALUES ($1, $2)', 
       [userId, 100.00]
     );
 
+    // 7. Bonus Parrainage
     if (referredBy) {
       const BONUS_AMOUNT = 5.00;
       await client.query(
@@ -63,23 +73,37 @@ export const register = async (req: Request, res: Response) => {
       );
     }
 
+    // 8. ENVOI DE L'EMAIL RÉEL (HOSTINGER)
+    await sendVerificationEmail(email.toLowerCase().trim(), username, otp);
+
     await client.query('COMMIT'); 
 
-    console.log("-----------------------------------------");
-    console.log(`NOUVEL INSCRIT : ${username} (${email})`);
-    console.log(`CODE DE VÉRIFICATION OTP : ${otp}`);
-    console.log("-----------------------------------------");
+    console.log(`✅ Mail envoyé à ${email} | OTP: ${otp}`);
 
-    res.status(201).json({ message: "Compte créé. Veuillez vérifier votre email.", email: email });
+    res.status(201).json({ 
+      message: "Compte créé. Veuillez vérifier votre boîte mail pour le code OTP.", 
+      email: email 
+    });
 
-  } catch (error: any) {
+  // Dans ton backend: src/controllers/authController.ts
+
+} catch (error: any) {
     await client.query('ROLLBACK');
-    res.status(500).json({ message: "Erreur lors de l'inscription.", detail: error.message });
-  } finally {
-    client.release();
-  }
+    
+    // TRÈS IMPORTANT : Regarde ton terminal backend pour lire ce message
+    console.error("DÉTAIL DE L'ERREUR D'INSCRIPTION:", error); 
+    
+    // On renvoie le message d'erreur précis au Front pour débugger
+    res.status(500).json({ 
+        message: "Erreur lors de l'inscription.", 
+        error: error.message 
+    });
+}
 };
 
+// ==========================================
+// CONNEXION (LOGIN)
+// ==========================================
 export const login = async (req: Request, res: Response) => {
   const { email, password } = req.body;
   try {
@@ -103,19 +127,17 @@ export const login = async (req: Request, res: Response) => {
       return res.status(401).json({ message: "Identifiants invalides." });
     }
 
-    // --- MISE À JOUR DU TOKEN AVEC LE ROLE ---
     const token = jwt.sign(
       { 
         id: user.id, 
         email: user.email, 
-        role: user.role, // On utilise la colonne 'role'
+        role: user.role, 
         isAdmin: user.role === 'admin' || user.role === 'super_admin' 
       },
       process.env.JWT_SECRET as string,
       { expiresIn: '24h' }
     );
 
-    // --- MISE À JOUR DE LA RÉPONSE JSON (Indispensable pour le front) ---
     res.json({
       message: "Connexion réussie",
       token,
@@ -124,7 +146,7 @@ export const login = async (req: Request, res: Response) => {
         email: user.email, 
         username: user.username, 
         avatar_id: user.avatar_id,
-        role: user.role // On envoie le rôle au Front-end ici
+        role: user.role 
       }
     });
   } catch (error) {
@@ -132,7 +154,9 @@ export const login = async (req: Request, res: Response) => {
   }
 };
 
-// ... verifyOTP reste inchangé ...
+// ==========================================
+// VÉRIFICATION OTP
+// ==========================================
 export const verifyOTP = async (req: Request, res: Response) => {
   const { email, code } = req.body;
   try {
@@ -156,7 +180,9 @@ export const verifyOTP = async (req: Request, res: Response) => {
   }
 };
 
-// --- MISE À JOUR DE GETME ---
+// ==========================================
+// RÉCUPÉRATION INFOS (GET ME)
+// ==========================================
 export const getMe = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
@@ -179,7 +205,7 @@ export const getMe = async (req: AuthRequest, res: Response) => {
       email: user.email,
       referral_code: user.referral_code,
       avatar_id: user.avatar_id,
-      role: user.role, // On ajoute le rôle ici aussi
+      role: user.role,
       balance: parseFloat(balance)
     });
   } catch (error: any) {
@@ -187,8 +213,51 @@ export const getMe = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// ... updateProfile, updatePassword, forgotPassword, resetPassword restent inchangés ...
-// (Mais assure-toi qu'ils sont bien présents à la fin du fichier)
+// ==========================================
+// MOT DE PASSE OUBLIÉ (FORGOT PASSWORD)
+// ==========================================
+export const forgotPassword = async (req: Request, res: Response) => {
+  const { email } = req.body;
+  try {
+    const userRes = await pool.query('SELECT id, username FROM users WHERE email = $1', [email.toLowerCase().trim()]);
+    if (userRes.rows.length === 0) return res.status(404).json({ message: "Aucun compte associé à cet email." });
+    
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    await pool.query('UPDATE users SET otp_code = $1 WHERE email = $2', [resetCode, email.toLowerCase().trim()]);
+
+    // OPTIONNEL : Envoyer aussi un mail ici via Hostinger
+    await sendVerificationEmail(email.toLowerCase().trim(), userRes.rows[0].username, resetCode);
+
+    res.json({ message: "Un code de récupération a été envoyé à votre email." });
+  } catch (error) {
+    res.status(500).json({ message: "Erreur lors de la demande." });
+  }
+};
+
+// ==========================================
+// RÉINITIALISATION (RESET PASSWORD)
+// ==========================================
+export const resetPassword = async (req: Request, res: Response) => {
+  const { email, code, newPassword } = req.body;
+  try {
+    const userRes = await pool.query('SELECT id FROM users WHERE email = $1 AND otp_code = $2', [email.toLowerCase().trim(), code]);
+    if (userRes.rows.length === 0) return res.status(400).json({ message: "Code invalide ou expiré." });
+    
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+    
+    await pool.query('UPDATE users SET password_hash = $1, otp_code = NULL WHERE email = $2', [hashedPassword, email.toLowerCase().trim()]);
+    
+    res.json({ message: "Mot de passe réinitialisé avec succès !" });
+  } catch (error) {
+    res.status(500).json({ message: "Erreur lors de la réinitialisation." });
+  }
+};
+
+// ==========================================
+// MISES À JOUR PROFIL / PASSWORD
+// ==========================================
 export const updateProfile = async (req: AuthRequest, res: Response) => {
   const { username, avatar_id } = req.body;
   const userId = req.user?.id;
@@ -223,33 +292,5 @@ export const updatePassword = async (req: AuthRequest, res: Response) => {
     res.json({ message: "Mot de passe mis à jour avec succès !" });
   } catch (error) {
     res.status(500).json({ message: "Erreur lors de la mise à jour du mot de passe." });
-  }
-};
-
-export const forgotPassword = async (req: Request, res: Response) => {
-  const { email } = req.body;
-  try {
-    const userRes = await pool.query('SELECT id, username FROM users WHERE email = $1', [email.toLowerCase().trim()]);
-    if (userRes.rows.length === 0) return res.status(404).json({ message: "Aucun compte associé à cet email." });
-    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
-    await pool.query('UPDATE users SET otp_code = $1 WHERE email = $2', [resetCode, email.toLowerCase().trim()]);
-    console.log(`CODE DE RÉCUPÉRATION : ${resetCode}`);
-    res.json({ message: "Code de récupération envoyé." });
-  } catch (error) {
-    res.status(500).json({ message: "Erreur lors de la demande." });
-  }
-};
-
-export const resetPassword = async (req: Request, res: Response) => {
-  const { email, code, newPassword } = req.body;
-  try {
-    const userRes = await pool.query('SELECT id FROM users WHERE email = $1 AND otp_code = $2', [email.toLowerCase().trim(), code]);
-    if (userRes.rows.length === 0) return res.status(400).json({ message: "Code invalide ou expiré." });
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(newPassword, salt);
-    await pool.query('UPDATE users SET password_hash = $1, otp_code = NULL WHERE email = $2', [hashedPassword, email.toLowerCase().trim()]);
-    res.json({ message: "Mot de passe réinitialisé avec succès !" });
-  } catch (error) {
-    res.status(500).json({ message: "Erreur lors de la réinitialisation." });
   }
 };
